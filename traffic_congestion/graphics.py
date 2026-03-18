@@ -2,21 +2,18 @@ import math
 import numpy as np
 from pyray import *
 from enum import Enum, auto
+import pickle
 
 NODE_RADIUS   = 14
 ARROW_SIZE    = 14
 HANDLE_RADIUS = 8
 
 class QuadraticBezier:
-    def __init__(self, p0, p2):
-        self.p0   = np.array(p0, dtype=float)
-        self.p2   = np.array(p2, dtype=float)
-        self.ctrl = (self.p0 + self.p2) / 2
+    def __init__(self, node0, node1, nodes):
+        self.node0 = node0
+        self.node1 = node1
+        self.ctrl = (nodes[node0] + nodes[node1]) / 2
         self._dragging_ctrl = False
-
-    def update_endpoints(self, p0, p2):
-        self.p0[:] = p0
-        self.p2[:] = p2
 
     def try_grab(self, mouse):
         if np.linalg.norm(self.ctrl - mouse) < HANDLE_RADIUS:
@@ -33,13 +30,13 @@ class QuadraticBezier:
     def is_dragging(self):
         return self._dragging_ctrl
 
-    def point_at(self, t):
-        return (1 - t)**2 * self.p0 + 2 * (1 - t) * t * self.ctrl + t**2 * self.p2
+    def point_at(self, t, nodes):
+        return (1 - t)**2 * nodes[self.node0] + 2 * (1 - t) * t * self.ctrl + t**2 * nodes[self.node1]
 
-    def tangent_at(self, t):
-        return 2 * (1 - t) * (self.ctrl - self.p0) + 2 * t * (self.p2 - self.ctrl)
+    def tangent_at(self, t, nodes):
+        return 2 * (1 - t) * (self.ctrl - nodes[self.node0]) + 2 * t * (nodes[self.node1] - self.ctrl)
 
-    def draw(self, color=BLACK):
+    def draw(self, nodes, color=BLACK):
         steps = 100
         prev  = None
         tip   = None
@@ -47,12 +44,12 @@ class QuadraticBezier:
 
         for i in range(steps + 1):
             t  = i / steps
-            pt = self.point_at(t)
+            pt = self.point_at(t, nodes)
 
-            if np.linalg.norm(pt - self.p0) < NODE_RADIUS:
+            if np.linalg.norm(pt - nodes[self.node0]) < NODE_RADIUS:
                 prev = pt
                 continue
-            if np.linalg.norm(pt - self.p2) < NODE_RADIUS:
+            if np.linalg.norm(pt - nodes[self.node1]) < NODE_RADIUS:
                 tip, tip_t = pt, t
                 break
 
@@ -63,7 +60,7 @@ class QuadraticBezier:
         if tip is None:
             return
 
-        tang   = self.tangent_at(tip_t)
+        tang   = self.tangent_at(tip_t, nodes)
         length = np.linalg.norm(tang)
         if length < 1e-6:
             return
@@ -124,9 +121,10 @@ def update(state, drag_start, nodes, edges, mouse_pos, node_hit):
         case State.DRAGGING:
             if released:
                 if node_hit is not None and node_hit != drag_start:
-                    if not any(e.p0 is nodes[drag_start] and e.p2 is nodes[node_hit]
+                    # FIX 1: use node0/node1 (not e.p0/e.p2) for duplicate-edge check
+                    if not any(e.node0 == drag_start and e.node1 == node_hit
                                for e in edges):
-                        edges.append(QuadraticBezier(nodes[drag_start], nodes[node_hit]))
+                        edges.append(QuadraticBezier(drag_start, node_hit, nodes))
                 return State.IDLE, None
 
     return state, drag_start
@@ -151,16 +149,29 @@ while not window_should_close():
     state, drag_start = update(state, drag_start, nodes, edges, mouse_pos, node_hit)
 
     if state == State.DRAGGING:
-        preview = QuadraticBezier(nodes[drag_start], mp)
-        preview.draw(GRAY)
+        # FIX 2: removed stray print(); FIX 3: pass nodes first, color second
+        preview = QuadraticBezier(drag_start, -1, nodes + [mp])
+        preview.draw(nodes + [mp], GRAY)
 
     for edge in edges:
-        edge.draw()
+        edge.draw(nodes)
         edge.draw_handle()
 
     for i, node in enumerate(nodes):
         color = DARKBLUE if i == drag_start else BLUE
         draw_circle(int(node[0]), int(node[1]), NODE_RADIUS, color)
+
+    if is_key_pressed(KeyboardKey.KEY_S):
+        data = {
+            "nodes": nodes,
+            "edges": edges,
+        }
+        pickle.dump(data, open('data.pkl', 'wb'))
+
+    if is_key_pressed(KeyboardKey.KEY_L):
+        data = pickle.load(open('data.pkl', 'rb'))
+        nodes = data["nodes"]
+        edges = data["edges"]
 
     draw_circle(int(mp[0]), int(mp[1]), 6, RED)
 
