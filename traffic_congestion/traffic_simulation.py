@@ -1,14 +1,16 @@
 import random
 
 
-road_length = 1500
+road_length = 2000
 v_max = 50
 entry_points = [100,400, 500, 900, 1300]    # k "in-points" 
-exit_points = [250, 500, 850, 1000]         # n "out-points"
+exit_points = [250, 500, 850, 1000, 1600]         # n "out-points"
 
 safe_distance = 10
 entry_rate = 0.05
-dt = 0.5                                    # how much time passes between updates
+dt = 0.5                                    # how much time passes between updates, time step
+n_cars = 20                                 # start with n cars already on the road
+
 class Car:
     def __init__(self, position, velocity, length, reaction_speed, exit_target):
         self.x = position
@@ -18,14 +20,16 @@ class Car:
         self.exit = exit_target
 
 
-# make certain parts of the road with different lokal speed limits
+# make certain parts of the road with different local speed limits
 def local_speed_limit(x):
+    """
     if 300 <= x < 500:
         return 20
     elif 900 <= x < 1100:
         return 30
     else:
-        return v_max
+    """
+    return v_max
 
 
 def distance_to_next_car(car, next_car):
@@ -68,11 +72,11 @@ def remove_exiting_cars(cars):
 def try_add_cars(cars):
     for point in entry_points:
         if random.random() < entry_rate:
-            can_enter = False
+            too_close = False
             for car in cars:
                 d = abs(car.x - point)
                 d = min(d, road_length - d)
-                if d < safe_distance:
+                if d < safe_distance:               # if there is no space -> can't enter
                     too_close = True
                     break
 
@@ -90,7 +94,7 @@ def try_add_cars(cars):
 
 #add cars to the simulation
 cars = []
-for _ in range(100):                        
+for _ in range(n_cars):                        
     x = random.uniform(0, road_length)
     v = random.uniform(5, v_max)
     l = random.uniform(2, 4)
@@ -103,3 +107,4 @@ for step in range(200):
     update_positions(cars)
     cars = remove_exiting_cars(cars)
     try_add_cars(cars)
+    print(step, len(cars), round(sum(car.v for car in cars) / len(cars), 2))
