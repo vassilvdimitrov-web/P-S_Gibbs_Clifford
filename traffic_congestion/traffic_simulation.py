@@ -3,18 +3,19 @@ import random
 
 road_length = 1500
 v_max = 50
-entry_points = [100,400, 500, 900, 1300]    #k "in-points" 
-exit_points = [250, 500, 850, 1000]         #n "out-points"
+entry_points = [100,400, 500, 900, 1300]    # k "in-points" 
+exit_points = [250, 500, 850, 1000]         # n "out-points"
 
 safe_distance = 10
-
+entry_rate = 0.05
+dt = 0.5                                    # how much time passes between updates
 class Car:
-    def __init__(self, position, velocity, length, reaction_speed, wants_to_exit_at):
+    def __init__(self, position, velocity, length, reaction_speed, exit_target):
         self.x = position
         self.v = velocity
         self.l = length
         self.reac = reaction_speed
-        self.exit = wants_to_exit_at
+        self.exit = exit_target
 
 
 # make certain parts of the road with different lokal speed limits
@@ -25,17 +26,6 @@ def local_speed_limit(x):
         return 30
     else:
         return v_max
-    
- 
-#add cars to the simulation
-cars = []
-for _ in range(100):                        
-    x = random.uniform(0, road_length)
-    v = random.uniform(5, v_max)
-    l = random.uniform(2, 4)
-    reac = random.uniform(0.30, 2.0)
-    exit = random.choise(exit_points)
-    cars.append(Car(x, v, l, reac, exit))
 
 
 def distance_to_next_car(car, next_car):
@@ -59,7 +49,57 @@ def update_velocities(cars):
         else:
             car.v = min(limit, car.v + 1)
 
-entry_rate = 0.05
+# x(t + dt) = x(t) + v*dt
+def update_positions(cars):
+    for car in cars:
+        car.x = (car.x + car.v * dt) % road_length  # stay on the road (reapeat the circle)
+
+def remove_exiting_cars(cars):
+    remaining = []
+    for car in cars:
+        d = abs(car.x - car.exit)                   # distance to exit
+        d = min(d, road_length - d)                 # minimal distance (beacuse of the circle 
+                                                    # we can pass the 0 point when we have are 
+                                                    # at the "end" of the road
+        if d > 5:                                   # if car is close (≤5) to exit remove it
+            remaining.append(car)
+    return remaining
+
+def try_add_cars(cars):
+    for point in entry_points:
+        if random.random() < entry_rate:
+            can_enter = False
+            for car in cars:
+                d = abs(car.x - point)
+                d = min(d, road_length - d)
+                if d < safe_distance:
+                    too_close = True
+                    break
+
+            if not too_close:
+                cars.append(
+                    Car(
+                        position=point,
+                        velocity=5,
+                        length=random.uniform(2, 4),
+                        reaction_speed=random.uniform(0.5, 1.5),
+                        exit_target=random.choice(exit_points)
+                    )
+                )
 
 
+#add cars to the simulation
+cars = []
+for _ in range(100):                        
+    x = random.uniform(0, road_length)
+    v = random.uniform(5, v_max)
+    l = random.uniform(2, 4)
+    reac = random.uniform(0.30, 2.0)
+    exit = random.choice(exit_points)
+    cars.append(Car(x, v, l, reac, exit))
 
+for step in range(200):
+    update_velocities(cars)
+    update_positions(cars)
+    cars = remove_exiting_cars(cars)
+    try_add_cars(cars)
