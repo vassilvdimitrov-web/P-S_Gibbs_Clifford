@@ -4,6 +4,8 @@ from pyray import *
 from enum import Enum, auto
 import pickle
 
+
+
 NODE_RADIUS   = 14
 ARROW_SIZE    = 14
 HANDLE_RADIUS = 8
@@ -36,7 +38,10 @@ class QuadraticBezier:
     def tangent_at(self, t, nodes):
         return 2 * (1 - t) * (self.ctrl - nodes[self.node0]) + 2 * t * (nodes[self.node1] - self.ctrl)
 
-    def draw(self, nodes, color=BLACK):
+    def draw(self, nodes, color=None):
+        if color is None:
+            color = BLACK
+            
         steps = 100
         prev  = None
         tip   = None
@@ -81,7 +86,6 @@ class QuadraticBezier:
 
     def draw_handle(self):
         draw_circle(int(self.ctrl[0]), int(self.ctrl[1]), HANDLE_RADIUS, GREEN)
-
 
 class State(Enum):
     IDLE     = auto()
@@ -129,7 +133,6 @@ def update(state, drag_start, nodes, edges, mouse_pos, node_hit):
 
     return state, drag_start
 
-
 init_window(600, 600, "Directed Graph")
 set_target_fps(60)
 
@@ -149,9 +152,15 @@ while not window_should_close():
     state, drag_start = update(state, drag_start, nodes, edges, mouse_pos, node_hit)
 
     if state == State.DRAGGING:
-        # FIX 2: removed stray print(); FIX 3: pass nodes first, color second
         preview = QuadraticBezier(drag_start, -1, nodes + [mp])
         preview.draw(nodes + [mp], GRAY)
+
+    if edges:
+        road = edges[0]
+        loc = road.point_at(0.5, nodes)
+
+        draw_rectangle(int(loc[0]), int(loc[1]), 5, 10, ORANGE)
+
 
     for edge in edges:
         edge.draw(nodes)
