@@ -3,3 +3,4 @@ Class3.ipynb
 Tutorial 1.ipynb
 Tutorial_2_vf.ipynb
 *.pkl
+__pycache__

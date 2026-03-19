@@ -38,6 +38,8 @@ def distance_to_next_car(car, next_car):
         d += road_length
     return d
 
+def car_relative_position(car):
+    return car.x / road_length
 
 # change speed depending on the the distance to the car in front
 def update_velocities(cars):
