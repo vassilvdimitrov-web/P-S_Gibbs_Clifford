@@ -38,6 +38,8 @@ def distance_to_next_car(car, next_car):
         d += road_length
     return d
 
+def car_relative_position(car):
+    return car.x / road_length
 
 # change speed depending on the the distance to the car in front
 def update_velocities(cars):
@@ -90,21 +92,25 @@ def try_add_cars(cars):
                         exit_target=random.choice(exit_points)
                     )
                 )
+        
+## just for debugging
+def is_car_at_end_of_road(car):
+    return abs(road_length - car.x) < 10
 
+if __name__ == "__main__":
+    #add cars to the simulation
+    cars = []
+    for _ in range(n_cars):                        
+        x = random.uniform(0, road_length)
+        v = random.uniform(5, v_max)
+        l = random.uniform(2, 4)
+        reac = random.uniform(0.30, 2.0)
+        exit = random.choice(exit_points)
+        cars.append(Car(x, v, l, reac, exit))
 
-#add cars to the simulation
-cars = []
-for _ in range(n_cars):                        
-    x = random.uniform(0, road_length)
-    v = random.uniform(5, v_max)
-    l = random.uniform(2, 4)
-    reac = random.uniform(0.30, 2.0)
-    exit = random.choice(exit_points)
-    cars.append(Car(x, v, l, reac, exit))
-
-for step in range(200):
-    update_velocities(cars)
-    update_positions(cars)
-    cars = remove_exiting_cars(cars)
-    try_add_cars(cars)
-    print(step, len(cars), round(sum(car.v for car in cars) / len(cars), 2))
+    for step in range(200):
+        update_velocities(cars)
+        update_positions(cars)
+        cars = remove_exiting_cars(cars)
+        try_add_cars(cars)
+        print(step, len(cars), round(sum(car.v for car in cars) / len(cars), 2))
