@@ -2,14 +2,24 @@ import numpy as np
 from scipy import integrate, optimize
 import random
 
+from scipy import integrate, optimize
+import random
+
 from pyray import *
+import pickle
+
+from dataclasses import dataclass,field
 import pickle
 
 from dataclasses import dataclass,field
 from enum import Enum, auto
 from typing import List
 
+from typing import List
+
 import traffic_simulation as tsim
+import entexi as eti
+
 import entexi as eti
 
 
@@ -19,6 +29,9 @@ NODE_RADIUS   = 14
 ARROW_SIZE    = 14
 HANDLE_RADIUS = 8
 
+GRAPH_W  = 900          # width of the graph/canvas area
+PANEL_W  = 220          # width of the right-side properties panel
+WINDOW_W = GRAPH_W + PANEL_W
 GRAPH_W  = 900          # width of the graph/canvas area
 PANEL_W  = 220          # width of the right-side properties panel
 WINDOW_W = GRAPH_W + PANEL_W
@@ -64,9 +77,11 @@ class QuadraticBezier:
         p0, p1 = nodes[self.node0], nodes[self.node1]
         return 2 * (1 - t) * (self.ctrl - p0) + 2 * t * (p1 - self.ctrl)
 
+
     def total_length(self, nodes):
         p0, p1 = nodes[self.node0], nodes[self.node1]
         return quadratic_bezier_arc_length(p0, self.ctrl, p1, 0, 1)[0]
+
 
     def total_length_from_to(self, t_start, t_end, nodes):
         p0, p1 = nodes[self.node0], nodes[self.node1]
@@ -133,23 +148,29 @@ def quadratic_bezier_arc_length(P0, P1, P2, t_start, t_end, return_integrand=Fal
     """
     Compute the arc length of a quadratic Bézier curve.
 
+
     Parameters:
         P0, P1, P2: array-like control points, e.g. [x, y]
+
 
     Returns:
         Arc length (float)
     """
     P0, P1, P2 = np.array(P0), np.array(P1), np.array(P2)
 
+
     A = P1 - P0  # vector A
     B = P2 - P1  # vector B
+
 
     A2 = np.dot(A, A)   # |A|²
     AB = np.dot(A, B)   # A·B
     B2 = np.dot(B, B)   # |B|²
 
+
     def integrand(t):
         return 2 * np.sqrt(A2*(1-t)**2 + 2*AB*t*(1-t) + B2*t**2)
+
 
     length, error = integrate.quad(integrand, t_start, t_end)
     if return_integrand:
@@ -206,6 +227,21 @@ class Edge:
     bezier: QuadraticBezier
     node_type: EntryNode | ExitNode = field(default_factory=EntryNode)
     cars: List[tsim.Car] = field(default_factory=list)
+@dataclass
+class EntryNode():
+    spawn_probability: float = 0.05
+
+
+@dataclass
+class ExitNode():
+    despawn_probability: float = 0.05
+
+
+@dataclass
+class Edge:
+    bezier: QuadraticBezier
+    node_type: EntryNode | ExitNode = field(default_factory=EntryNode)
+    cars: List[tsim.Car] = field(default_factory=list)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -226,16 +262,28 @@ def mouse_in_ui(mouse_pos):
 def mouse_in_panel(mouse_pos):
     """True when the cursor is inside the right-side properties panel."""
     return mouse_pos.x >= GRAPH_W
+    """True when the cursor is inside the top UI strip (graph area only)."""
+    return mouse_pos.y < UI_HEIGHT and mouse_pos.x < GRAPH_W
+
+
+def mouse_in_panel(mouse_pos):
+    """True when the cursor is inside the right-side properties panel."""
+    return mouse_pos.x >= GRAPH_W
 
 # ── Mode updates ──────────────────────────────────────────────────────────────
 
 def update_node_mode(drag_state, drag_idx, nodes, edges, node_types, mouse_pos,
                      node_hit, selected_node):
+def update_node_mode(drag_state, drag_idx, nodes, edges, node_types, mouse_pos,
+                     node_hit, selected_node):
     """
     Left-click empty space  → add node
     Left-drag a node        → move node (also selects it)
+    Left-drag a node        → move node (also selects it)
     Right-click a node      → delete node + its edges
     Edges and their handles are visible but not interactive.
+
+    Returns (drag_state, drag_idx, selected_node).
 
     Returns (drag_state, drag_idx, selected_node).
     """
@@ -249,10 +297,27 @@ def update_node_mode(drag_state, drag_idx, nodes, edges, node_types, mouse_pos,
         idx = node_hit
         edges[:] = [e for e in edges
                     if e.bezier.node0 != idx and e.bezier.node1 != idx]
+        edges[:] = [e for e in edges
+                    if e.bezier.node0 != idx and e.bezier.node1 != idx]
         for e in edges:
             if e.bezier.node0 > idx: e.bezier.node0 -= 1
             if e.bezier.node1 > idx: e.bezier.node1 -= 1
+            if e.bezier.node0 > idx: e.bezier.node0 -= 1
+            if e.bezier.node1 > idx: e.bezier.node1 -= 1
         nodes.pop(idx)
+        # Rebuild node_types with shifted indices
+        new_types = {}
+        for k, v in node_types.items():
+            if k == idx:
+                continue
+            new_types[k - 1 if k > idx else k] = v
+        node_types.clear()
+        node_types.update(new_types)
+        if selected_node == idx:
+            selected_node = None
+        elif selected_node is not None and selected_node > idx:
+            selected_node -= 1
+        return DragState.IDLE, None, selected_node
         # Rebuild node_types with shifted indices
         new_types = {}
         for k, v in node_types.items():
@@ -273,6 +338,8 @@ def update_node_mode(drag_state, drag_idx, nodes, edges, node_types, mouse_pos,
                 if node_hit is not None:
                     selected_node = node_hit
                     return DragState.DRAGGING, node_hit, selected_node
+                    selected_node = node_hit
+                    return DragState.DRAGGING, node_hit, selected_node
                 else:
                     nodes.append(mp.copy())
 
@@ -281,7 +348,9 @@ def update_node_mode(drag_state, drag_idx, nodes, edges, node_types, mouse_pos,
             nodes[drag_idx] = mp.copy()
             if released:
                 return DragState.IDLE, None, selected_node
+                return DragState.IDLE, None, selected_node
 
+    return drag_state, drag_idx, selected_node
     return drag_state, drag_idx, selected_node
 
 
@@ -301,6 +370,7 @@ def update_edge_mode(drag_state, drag_idx, nodes, edges, mouse_pos, node_hit):
     if rclick:
         for i, edge in enumerate(edges):
             if np.linalg.norm(edge.bezier.ctrl - mp) < HANDLE_RADIUS * 2:
+            if np.linalg.norm(edge.bezier.ctrl - mp) < HANDLE_RADIUS * 2:
                 edges.pop(i)
                 return DragState.IDLE, None
 
@@ -313,6 +383,7 @@ def update_edge_mode(drag_state, drag_idx, nodes, edges, mouse_pos, node_hit):
             edge.bezier.release()
 
     ctrl_grabbed = any(e.bezier.is_dragging for e in edges)
+    ctrl_grabbed = any(e.bezier.is_dragging for e in edges)
 
     match drag_state:
         case DragState.IDLE:
@@ -324,7 +395,9 @@ def update_edge_mode(drag_state, drag_idx, nodes, edges, mouse_pos, node_hit):
                 if (node_hit is not None
                         and node_hit != drag_idx
                         and not any(e.bezier.node0 == drag_idx and e.bezier.node1 == node_hit
+                        and not any(e.bezier.node0 == drag_idx and e.bezier.node1 == node_hit
                                     for e in edges)):
+                    edges.append(Edge(QuadraticBezier(drag_idx, node_hit, nodes)))
                     edges.append(Edge(QuadraticBezier(drag_idx, node_hit, nodes)))
                 return DragState.IDLE, None
 
@@ -355,6 +428,9 @@ def draw_ui(edit_mode, mouse_pos):
     # Background strip (graph area only)
     draw_rectangle(0, 0, GRAPH_W, UI_HEIGHT, Color(240, 240, 245, 255))
     draw_line(0, UI_HEIGHT - 1, GRAPH_W, UI_HEIGHT - 1, Color(180, 180, 190, 255))
+    # Background strip (graph area only)
+    draw_rectangle(0, 0, GRAPH_W, UI_HEIGHT, Color(240, 240, 245, 255))
+    draw_line(0, UI_HEIGHT - 1, GRAPH_W, UI_HEIGHT - 1, Color(180, 180, 190, 255))
 
     btn_w, btn_h = 130, 34
     pad          = 10
@@ -376,6 +452,8 @@ def draw_ui(edit_mode, mouse_pos):
 
     # Save / load hint (bottom-right of graph area)
     draw_text("S: save   L: load", GRAPH_W - 130, UI_HEIGHT - 18, 13, Color(140, 140, 160, 255))
+    # Save / load hint (bottom-right of graph area)
+    draw_text("S: save   L: load", GRAPH_W - 130, UI_HEIGHT - 18, 13, Color(140, 140, 160, 255))
 
     # Handle clicks only when released (avoids double-firing)
     new_mode = edit_mode
@@ -386,6 +464,122 @@ def draw_ui(edit_mode, mouse_pos):
             new_mode = EditMode.EDITEDGES
 
     return new_mode
+
+
+def _draw_float_editor(obj, attr, panel_x, y, mouse_pos):
+    """Draw a  -  [value]  +  row for a float attribute on obj. Mutates obj."""
+    val = getattr(obj, attr)
+
+    btn_size  = 26
+    val_box_w = 64
+    gap       = 4
+
+    minus_rect = Rectangle(panel_x + 10,                          y, btn_size, btn_size)
+    val_rect   = Rectangle(panel_x + 10 + btn_size + gap,         y, val_box_w, btn_size)
+    plus_rect  = Rectangle(panel_x + 10 + btn_size + gap + val_box_w + gap, y, btn_size, btn_size)
+
+    # Minus button
+    draw_button(minus_rect, "-", False)
+    # Value box
+    draw_rectangle_rec(val_rect, WHITE)
+    draw_rectangle_lines_ex(val_rect, 1, Color(180, 180, 190, 255))
+    val_str = f"{val:.3f}"
+    tw = measure_text(val_str, 14)
+    draw_text(val_str,
+              int(val_rect.x + (val_box_w - tw) / 2),
+              int(val_rect.y + (btn_size - 14) / 2),
+              14, BLACK)
+    # Plus button
+    draw_button(plus_rect, "+", False)
+
+    if is_mouse_button_pressed(MouseButton.MOUSE_BUTTON_LEFT):
+        if check_collision_point_rec(mouse_pos, minus_rect):
+            setattr(obj, attr, round(max(0.0, val - 0.01), 4))
+        elif check_collision_point_rec(mouse_pos, plus_rect):
+            setattr(obj, attr, round(min(1.0, val + 0.01), 4))
+
+
+def draw_node_panel(selected_node, node_types, mouse_pos):
+    """
+    Draw the right-side node-properties panel.
+    Handles type-selection clicks and property edits.
+    Returns the (possibly mutated) node_types dict.
+    """
+    px = GRAPH_W
+
+    # Panel background
+    draw_rectangle(px, 0, PANEL_W, WINDOW_H, Color(245, 245, 250, 255))
+    draw_line(px, 0, px, WINDOW_H, Color(180, 180, 190, 255))
+
+    # Panel title bar
+    draw_rectangle(px, 0, PANEL_W, UI_HEIGHT, Color(235, 235, 242, 255))
+    draw_line(px, UI_HEIGHT - 1, px + PANEL_W, UI_HEIGHT - 1, Color(180, 180, 190, 255))
+    title = "Node Properties"
+    tw = measure_text(title, 16)
+    draw_text(title, px + (PANEL_W - tw) // 2, (UI_HEIGHT - 16) // 2, 16,
+              Color(40, 40, 60, 255))
+
+    if selected_node is None:
+        draw_text("No node selected", px + 14, UI_HEIGHT + 20, 13,
+                  Color(130, 130, 150, 255))
+        return node_types
+
+    node_type = node_types.get(selected_node)
+
+    y = UI_HEIGHT + 14
+
+    # Node index label
+    draw_text(f"Node {selected_node}", px + 14, y, 17, BLACK)
+    y += 30
+
+    # ── Type selector ──────────────────────────────────────────────────────
+    draw_text("Type", px + 14, y, 13, Color(80, 80, 100, 255))
+    y += 18
+
+    type_defs = [
+        ("None",  None),
+        ("Entry", "entry"),
+        ("Exit",  "exit"),
+    ]
+    btn_w = (PANEL_W - 28 - 2 * 6) // 3   # three equal buttons with gaps
+    btn_h = 26
+
+    for i, (label, _) in enumerate(type_defs):
+        bx = px + 14 + i * (btn_w + 6)
+        rect = Rectangle(bx, y, btn_w, btn_h)
+        is_active = (
+            (label == "None"  and node_type is None) or
+            (label == "Entry" and isinstance(node_type, EntryNode)) or
+            (label == "Exit"  and isinstance(node_type, ExitNode))
+        )
+        draw_button(rect, label, is_active)
+
+        if is_mouse_button_pressed(MouseButton.MOUSE_BUTTON_LEFT) and \
+                check_collision_point_rec(mouse_pos, rect):
+            if label == "None":
+                node_types.pop(selected_node, None)
+            elif label == "Entry":
+                if not isinstance(node_type, EntryNode):
+                    node_types[selected_node] = EntryNode()
+            else:  # Exit
+                if not isinstance(node_type, ExitNode):
+                    node_types[selected_node] = ExitNode()
+            node_type = node_types.get(selected_node)
+
+    y += btn_h + 18
+
+    # ── Property editor ────────────────────────────────────────────────────
+    if isinstance(node_type, EntryNode):
+        draw_text("spawn probability", px + 14, y, 12, Color(80, 80, 100, 255))
+        y += 16
+        _draw_float_editor(node_type, "spawn_probability", px, y, mouse_pos)
+
+    elif isinstance(node_type, ExitNode):
+        draw_text("despawn probability", px + 14, y, 12, Color(80, 80, 100, 255))
+        y += 16
+        _draw_float_editor(node_type, "despawn_probability", px, y, mouse_pos)
+
+    return node_types
 
 
 def _draw_float_editor(obj, attr, panel_x, y, mouse_pos):
@@ -519,6 +713,13 @@ def main():
     drag_idx               = None
     edit_mode              = EditMode.EDITNODES
     selected_node          = None
+    nodes                  = []
+    edges : List[Edge]     = []
+    node_types             = {}   # {node_idx: EntryNode | ExitNode}  absent = plain node
+    drag_state             = DragState.IDLE
+    drag_idx               = None
+    edit_mode              = EditMode.EDITNODES
+    selected_node          = None
 
 
     while not window_should_close():
@@ -527,8 +728,10 @@ def main():
         mp        = np.array([mouse_pos.x, mouse_pos.y])
         in_ui     = mouse_in_ui(mouse_pos)
         in_panel  = mouse_in_panel(mouse_pos)
+        in_panel  = mouse_in_panel(mouse_pos)
 
         # Only hit-test nodes when the cursor is in the graph area
+        node_hit  = None if (in_ui or in_panel) else find_node_at(nodes, mouse_pos)
         node_hit  = None if (in_ui or in_panel) else find_node_at(nodes, mouse_pos)
 
         # ── UI (mode buttons) ──────────────────────────────────────────────
@@ -536,7 +739,12 @@ def main():
 
         # ── Graph logic (blocked while cursor is in UI strip or panel) ─────
         if not in_ui and not in_panel:
+        # ── Graph logic (blocked while cursor is in UI strip or panel) ─────
+        if not in_ui and not in_panel:
             if edit_mode == EditMode.EDITNODES:
+                drag_state, drag_idx, selected_node = update_node_mode(
+                    drag_state, drag_idx, nodes, edges, node_types,
+                    mouse_pos, node_hit, selected_node)
                 drag_state, drag_idx, selected_node = update_node_mode(
                     drag_state, drag_idx, nodes, edges, node_types,
                     mouse_pos, node_hit, selected_node)
@@ -554,11 +762,22 @@ def main():
                         tmp += [car]
 
                 edge.cars = tmp
+        for _ in range(10):
+            for edge in edges:
+                #Temporary (get rid of cars at end)
+                tmp = []
+                for car in edge.cars:
+                    if not abs(edge.bezier.total_length(nodes)-car.x) < 1:
+                        tmp += [car]
+
+                edge.cars = tmp
 
                 # Spawn in a new car if only 1 car is present
                 if len(edge.cars) < 20:
                     edge.cars += [tsim.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None) for i in range(20-len(edge.cars))]
 
+                tsim.update_velocities(edge.cars)
+                tsim.update_positions(edge.cars)
                 tsim.update_velocities(edge.cars)
                 tsim.update_positions(edge.cars)
 
@@ -572,7 +791,9 @@ def main():
         # Edges
         for edge in edges:
             edge.bezier.draw(nodes)
+            edge.bezier.draw(nodes)
             if edit_mode == EditMode.EDITEDGES:
+                edge.bezier.draw_handle()
                 edge.bezier.draw_handle()
 
         # Edge-creation preview while dragging in edge mode
@@ -585,7 +806,10 @@ def main():
         for i, node in enumerate(nodes):
             nt = node_types.get(i)
 
+            nt = node_types.get(i)
+
             if i == drag_idx and drag_state == DragState.DRAGGING:
+                col = ORANGE
                 col = ORANGE
             elif i == node_hit:
                 col = SKYBLUE
@@ -593,8 +817,14 @@ def main():
                 col = Color(60, 180, 60, 255)    # green = entry
             elif isinstance(nt, ExitNode):
                 col = Color(210, 60, 60, 255)    # red   = exit
+                col = SKYBLUE
+            elif isinstance(nt, EntryNode):
+                col = Color(60, 180, 60, 255)    # green = entry
+            elif isinstance(nt, ExitNode):
+                col = Color(210, 60, 60, 255)    # red   = exit
             else:
                 col = DARKBLUE if edit_mode == EditMode.EDITNODES else BLUE
+
 
             draw_circle(int(node[0]), int(node[1]), NODE_RADIUS, col)
             draw_circle_lines(int(node[0]), int(node[1]), NODE_RADIUS, BLACK)
@@ -604,9 +834,18 @@ def main():
                 draw_circle_lines(int(node[0]), int(node[1]), NODE_RADIUS + 4,
                                   Color(255, 200, 0, 255))
 
+            # Selection ring
+            if i == selected_node and edit_mode == EditMode.EDITNODES:
+                draw_circle_lines(int(node[0]), int(node[1]), NODE_RADIUS + 4,
+                                  Color(255, 200, 0, 255))
+
         # Cursor dot (graph area only)
         if not in_ui and not in_panel:
+        if not in_ui and not in_panel:
             draw_circle(int(mp[0]), int(mp[1]), 4, RED)
+
+        # Right-side panel
+        draw_node_panel(selected_node, node_types, mouse_pos)
 
         # Right-side panel
         draw_node_panel(selected_node, node_types, mouse_pos)
@@ -615,18 +854,26 @@ def main():
         if is_key_pressed(KeyboardKey.KEY_S):
             pickle.dump({"nodes": nodes, "edges": edges, "node_types": node_types},
                         open("data.pkl", "wb"))
+            pickle.dump({"nodes": nodes, "edges": edges, "node_types": node_types},
+                        open("data.pkl", "wb"))
 
         if is_key_pressed(KeyboardKey.KEY_L):
             data  = pickle.load(open("data.pkl", "rb"))
             nodes = data["nodes"]
             edges = data["edges"]
             node_types = data.get("node_types", {})
+            node_types = data.get("node_types", {})
             drag_state = DragState.IDLE
             drag_idx   = None
+            selected_node = None
             selected_node = None
 
 
         # ── Car Drawing ────────────────────────────────────────────────────
+        for edge in edges:
+            for car in edge.cars:
+                t = edge.bezier.r_proportional(car.x/edge.bezier.total_length(nodes), nodes)
+                pos = edge.bezier.point_at(t, nodes)
         for edge in edges:
             for car in edge.cars:
                 t = edge.bezier.r_proportional(car.x/edge.bezier.total_length(nodes), nodes)
@@ -640,3 +887,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
