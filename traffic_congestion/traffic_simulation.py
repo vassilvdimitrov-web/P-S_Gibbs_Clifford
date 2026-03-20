@@ -70,7 +70,7 @@ def update_positions_on_edge(edge, cars, dt=0.5):       #when the car reaches th
             car.v = 0
             car.waiting_at_node= True
 
-def update_all_edges(edges, cars, safe_distance=10.0, dt=0.5):
+def update_all_edges(edges, cars, safe_distance=10.0, dt=0.05):
     for edge in edges:          #update velocities
         update_velocities_on_edge(edge, cars, safe_distance=safe_distance)
     for edge in edges:          #update positions
