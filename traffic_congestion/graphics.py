@@ -6,6 +6,7 @@ from scipy import integrate, optimize
 import traffic_simulation as tsim
 import random
 
+import entexi as ex
 # ── Constants ────────────────────────────────────────────────────────────────
 
 NODE_RADIUS   = 14
