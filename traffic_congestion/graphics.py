@@ -345,12 +345,28 @@ def draw_ui(edit_mode, mouse_pos):
     return new_mode
 
 
+
+
+
+def draw_car_on_edge(car, nodes):
+    if car.edge is None or car.edge.length is None or car.edge.length <= 1e-9:
+        return
+
+    bezier = car.edge.bezier_edge
+
+    r = max(0.0, min(1.0, car.s / car.edge.length))
+    t = bezier.r_proportional(r, nodes)
+    pos = bezier.point_at(t, nodes)
+
+    color = RED if car.is_bad_driver else Color(180, 180, 255, 255)
+    draw_circle(int(pos[0]), int(pos[1]), 5, color)
+
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 
 
 def main():
-    init_window(WINDOW_W, WINDOW_H, "")
+    init_window(WINDOW_W, WINDOW_H, "Traffic Graph")
     set_target_fps(60)
 
     nodes      = []
@@ -358,9 +374,9 @@ def main():
     drag_state = DragState.IDLE
     drag_idx   = None
     edit_mode  = EditMode.EDITNODES
-    cars = [tsim.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None), 
-            tsim.Car(200, random.uniform(5, tsim.v_max), 5, 0.2, None)]
-
+    #cars = [tsim.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None), 
+    #       tsim.Car(200, random.uniform(5, tsim.v_max), 5, 0.2, None)]
+    cars = []
 
     while not window_should_close():
         # ── Input ──────────────────────────────────────────────────────────
@@ -383,8 +399,51 @@ def main():
                 drag_state, drag_idx = update_edge_mode(
                     drag_state, drag_idx, nodes, edges, mouse_pos, node_hit)
 
-        # Car logic
+        # Build simulation edges from the drawn Bezier edges, so that every drawn 
+        # Bezier edge also has a simulation wrapper with node0, node1, speed_limit, length
+        road_edges = [tsim.RoadEdge(edge, speed_limit=12.0) for edge in edges]
+        for road_edge in road_edges:
+            road_edge.update_length(nodes)
 
+        # Reconnect cars to the new RoadEdge wrappers
+        for car in cars:
+            for road_edge in road_edges:
+                if car.edge is not None and road_edge.bezier_edge is car.edge.bezier_edge:
+                    car.edge = road_edge
+                    break
+
+        # Spawn initial cars if there are edges but no cars yet
+        if road_edges and len(cars) == 0:
+            cars.append(
+                tsim.Car(
+                    edge=road_edges[0],
+                    s=0.0,
+                    velocity=random.uniform(3.0, 6.0),
+                    length=10.0,
+                    reaction_speed=0.8,
+                    exit_node=None,
+                    is_bad_driver=False
+                )
+            )
+
+            cars.append(
+                tsim.Car(
+                    edge=road_edges[0],
+                    s=min(40.0, road_edges[0].length * 0.3),
+                    velocity=random.uniform(3.0, 6.0),
+                    length=10.0,
+                    reaction_speed=1.2,
+                    exit_node=None,
+                    is_bad_driver=True
+                )
+            )
+        
+
+
+        # Car logic: move cars on the current simulation edges
+        if road_edges:
+            tsim.update_all_edges(road_edges, cars, safe_distance=15.0, dt=0.2)
+        """
         #Temporary (get rid of cars at end)
         tmp = []
         for car in cars:
@@ -399,7 +458,7 @@ def main():
 
         tsim.update_velocities(cars)
         tsim.update_positions(cars)
-
+        """
         # ── Drawing ────────────────────────────────────────────────────────
         begin_drawing()
         clear_background(WHITE)
@@ -447,12 +506,15 @@ def main():
 
 
         # ── Car Drawing ────────────────────────────────────────────────────
+        for car in cars:
+            draw_car_on_edge(car, nodes)
+        """
         if edges:
             for car in cars:
                 t = edges[0].r_proportional(tsim.car_relative_position(car), nodes)
                 pos = edges[0].point_at(t, nodes)
                 draw_circle(int(pos[0]), int(pos[1]), 4, Color(180, 180, 255, 255))
-
+        """
         end_drawing()
 
     close_window()

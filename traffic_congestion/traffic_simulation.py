@@ -1,6 +1,96 @@
 import random
 
+class Car:
+    def __init__(self, edge, s, velocity, length, reaction_speed, exit_node=None, is_bad_driver=False):
+        self.edge = edge
+        self.s = s          #the position of the particular segment
+        self.v = velocity
+        self.l = length
+        self.reac = reaction_speed
+        self.exit_node = exit_node
+        self.is_bad_driver = is_bad_driver
+        self.waiting_at_node = False
+        self.finished = False           #when the car exits the system
 
+    def __repr__(self):
+        return f"Car(edge={id(self.edge)}, s={self.s:.2f}, v={self.v:.2f})"
+    def __repr__(self):
+        return f"Car(edge={id(self.edge)}, bad={self.is_bad_driver}, s={self.s:.2f}, v={self.v:.2f})"
+
+class RoadEdge:             #a road object
+    def __init__(self, bezier_edge, speed_limit=50.0):
+        self.bezier_edge = bezier_edge
+        self.node0 = bezier_edge.node0
+        self.node1 = bezier_edge.node1
+        self.speed_limit = speed_limit
+        self.length = None   
+
+    def update_length(self, nodes):
+        self.length = self.bezier_edge.total_length(nodes)
+
+def cars_on_edge(cars,edge):
+    return [car for car in cars if car.edge is edge and not car.finished]
+
+def distance_to_same_car_on_the_same_edge(car,next_car):
+    return next_car.s - car.s
+
+def update_velocities_on_edge(edge, cars, safe_distance=10.0, acceleration=2.0, brake_factor=5.0):
+    edge_cars = [car for car in cars if car.edge is edge and not car.finished and not car.waiting_at_node]
+    edge_cars.sort(key=lambda c: c.s)
+    for i, car in enumerate(edge_cars):
+        if car.is_bad_driver:
+            safe_dist = safe_distance * 1.5
+            accel = acceleration*0.7
+            brake = brake_factor * 1.5
+        else :
+            safe_dist = safe_distance
+            accel = acceleration
+            brake = brake_factor
+            
+        if i < len(edge_cars)-1:
+            next_car =edge_cars[i+1]
+            gap = distance_to_same_car_on_the_same_edge(car, next_car) - next_car.l
+        else:
+            gap = float("inf")  #the last car on the edge (no car in front)
+
+        if gap < safe_dist:     #reduce velocity
+            car.v = max(0.0, car.v - brake * car.reac)
+        else:                   # speed up
+            car.v = min (edge.speed_limit, car.v + accel)
+
+def update_positions_on_edge(edge, cars, dt=0.5):       #when the car reaches the end, it stops and waits for node logic
+    for car in cars:
+        if car.edge is not edge:
+            continue
+        if car.finished or car.waiting_at_node:
+            continue
+        car.s += car.v*dt
+        if car.s >= edge.length:
+            car.s = edge.length
+            car.v = 0
+            car.waiting_at_node= True
+
+def update_all_edges(edges, cars, safe_distance=10.0, dt=0.5):
+    for edge in edges:          #update velocities
+        update_velocities_on_edge(edge, cars, safe_distance=safe_distance)
+    for edge in edges:          #update positions
+        update_positions_on_edge(edge, cars, dt=dt)
+
+
+def add_car_on_edge(edge, exit_node=None, v=5.0, bad_driver_prob=0.2):
+    return Car(
+        edge=edge,
+        s=0.0,
+        velocity=v,
+        length=random.uniform(8.0, 14.0),
+        reaction_speed=random.uniform(0.5, 1.5),
+        exit_node=exit_node,
+        is_bad_driver=(random.random() < bad_driver_prob))
+
+
+
+
+"""
 road_length = 2000
 v_max = 50
 entry_points = [100,400, 500, 900, 1300]    # k "in-points" 
@@ -22,14 +112,14 @@ class Car:
 
 # make certain parts of the road with different local speed limits
 def local_speed_limit(x):
-    """
+    
     if 300 <= x < 500:
         return 20
     elif 900 <= x < 1100:
         return 30
     else:
-    """
-    return v_max
+    
+        return v_max
 
 
 def distance_to_next_car(car, next_car):
@@ -114,3 +204,4 @@ if __name__ == "__main__":
         cars = remove_exiting_cars(cars)
         try_add_cars(cars)
         print(step, len(cars), round(sum(car.v for car in cars) / len(cars), 2))
+"""
