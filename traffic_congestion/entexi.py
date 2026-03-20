@@ -1,5 +1,7 @@
 import random
 
+
+#suggestions
 class EntryNode:
     def __init__(self, linear_pos, node_id):
         self.linear_pos = linear_pos
@@ -18,8 +20,9 @@ class Car:
         self.x = position
         self.v = velocity
         self.reac = reaction_speed
-        self.exit = exit_pos  # This should be the linear_pos of the target
+        self.exit = exit_pos  
         self.l = length
+        
         self.is_waiting_to_enter = False
 
 def update_velocities_with_exits(cars, road_length):
@@ -62,12 +65,32 @@ def can_safely_enter(entry_pos, active_cars, road_length, safe_distance=15):
             return False
 
     return True
+    
+def is_gap_safe(approaching_car, entry_node_pos, road_length, safe_buffer=10):
+    """
+    Logic: The approaching car needs time to see the new car and brake.
+    Required Distance = (Velocity * Reaction Time) + Physical Buffer
+    """
+    dist_to_node = (entry_node_pos - approaching_car.x) % road_length
+    
+    # The 'reac' parameter from your Traffic Sim (0.3 to 2.0)
+    # Higher reaction speed value = slower response = needs more distance
+    required_dist = (approaching_car.v * approaching_car.reac) + safe_buffer
+    
+    return dist_to_node > required_dist
 
 def process_node_entries(entry_nodes, active_cars, road_length):
-    """Moves cars from side-road queues to the main active_cars list."""
+    """
+    Checks all entry nodes. If a car is waiting and the road is safe,
+    it moves the car from the queue to the active road.
+    """
     for node in entry_nodes:
         if node.waiting_queue:
-            if node.entry_green and can_safely_enter(node.linear_pos, active_cars, road_length):
+            # Check the car at the front of the line
+            next_car = node.waiting_queue[0]
+            
+            if can_safely_enter(node.linear_pos, active_cars, road_length, safe_distance=15):
+                # Remove from queue and mark as active
                 entering_car = node.waiting_queue.pop(0)
                 entering_car.is_waiting_to_enter = False
                 entering_car.x = node.linear_pos
@@ -81,9 +104,14 @@ def handle_exits(active_cars, road_length, exit_threshold=5):
         
         if dist < exit_threshold:
             active_cars.pop(i)
-
+            # You could add a 'score' or 'counter' here for your group stats
+            
 def generate_entry_demand(entry_nodes, exit_points, probability=0.05, max_q=5):
-    """Creates new cars at side-roads based on probability."""
+    """
+    Randomly adds new cars to the waiting queues of entry nodes.
+    This simulates people 'arriving' at the intersection.
+    """
+    import random
     for node in entry_nodes:
         if len(node.waiting_queue) < max_q:
             if random.random() < probability:
