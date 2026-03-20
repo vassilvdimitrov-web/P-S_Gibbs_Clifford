@@ -1,6 +1,6 @@
 
 
-    #suggestions
+#suggestions
 class EntryNode:
     def __init__(self, linear_pos, node_id):
         self.linear_pos = linear_pos
@@ -66,35 +66,35 @@ def can_safely_enter(entry_pos, cars, road_length, safe_distance):
 
     return True
     
-    def is_gap_safe(approaching_car, entry_node_pos, road_length, safe_buffer=10):
-        """
-        Logic: The approaching car needs time to see the new car and brake.
-        Required Distance = (Velocity * Reaction Time) + Physical Buffer
-        """
-        dist_to_node = (entry_node_pos - approaching_car.x) % road_length
-        
-        # The 'reac' parameter from your Traffic Sim (0.3 to 2.0)
-        # Higher reaction speed value = slower response = needs more distance
-        required_dist = (approaching_car.v * approaching_car.reac) + safe_buffer
-        
-        return dist_to_node > required_dist
+def is_gap_safe(approaching_car, entry_node_pos, road_length, safe_buffer=10):
+    """
+    Logic: The approaching car needs time to see the new car and brake.
+    Required Distance = (Velocity * Reaction Time) + Physical Buffer
+    """
+    dist_to_node = (entry_node_pos - approaching_car.x) % road_length
+    
+    # The 'reac' parameter from your Traffic Sim (0.3 to 2.0)
+    # Higher reaction speed value = slower response = needs more distance
+    required_dist = (approaching_car.v * approaching_car.reac) + safe_buffer
+    
+    return dist_to_node > required_dist
 
-    def process_node_entries(entry_nodes, active_cars, road_length):
-        """
-        Checks all entry nodes. If a car is waiting and the road is safe,
-        it moves the car from the queue to the active road.
-        """
-        for node in entry_nodes:
-            if node.waiting_queue:
-                # Check the car at the front of the line
-                next_car = node.waiting_queue[0]
-                
-                if can_safely_enter(node.linear_pos, active_cars, road_length, safe_distance=15):
-                    # Remove from queue and mark as active
-                    entering_car = node.waiting_queue.pop(0)
-                    entering_car.is_waiting_to_enter = False
-                    entering_car.x = node.linear_pos
-                    active_cars.append(entering_car)
+def process_node_entries(entry_nodes, active_cars, road_length):
+    """
+    Checks all entry nodes. If a car is waiting and the road is safe,
+    it moves the car from the queue to the active road.
+    """
+    for node in entry_nodes:
+        if node.waiting_queue:
+            # Check the car at the front of the line
+            next_car = node.waiting_queue[0]
+            
+            if can_safely_enter(node.linear_pos, active_cars, road_length, safe_distance=15):
+                # Remove from queue and mark as active
+                entering_car = node.waiting_queue.pop(0)
+                entering_car.is_waiting_to_enter = False
+                entering_car.x = node.linear_pos
+                active_cars.append(entering_car)
 
 def handle_exits(active_cars, road_length, exit_threshold=5):
     """
@@ -111,6 +111,7 @@ def handle_exits(active_cars, road_length, exit_threshold=5):
         if dist < exit_threshold:
             active_cars.pop(i)
             # You could add a 'score' or 'counter' here for your group stats
+            
 def generate_entry_demand(entry_nodes, exit_points, probability=0.05):
     """
     Randomly adds new cars to the waiting queues of entry nodes.
