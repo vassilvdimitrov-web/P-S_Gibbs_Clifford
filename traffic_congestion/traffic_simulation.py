@@ -8,7 +8,7 @@ exit_points = [250, 500, 850, 1000, 1600]         # n "out-points"
 
 safe_distance = 10
 entry_rate = 0.05
-dt = 0.5                                    # how much time passes between updates, time step
+dt = 0.01                                    # how much time passes between updates, time step
 n_cars = 20                                 # start with n cars already on the road
 
 class Car:
