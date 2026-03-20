@@ -1,5 +1,5 @@
 import random
-
+"""
 class Car:
     def __init__(self, edge, s, velocity, length, reaction_speed, exit_node=None, is_bad_driver=False):
         self.edge = edge
@@ -204,4 +204,3 @@ if __name__ == "__main__":
         cars = remove_exiting_cars(cars)
         try_add_cars(cars)
         print(step, len(cars), round(sum(car.v for car in cars) / len(cars), 2))
-"""
