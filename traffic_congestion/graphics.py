@@ -557,7 +557,7 @@ def main():
 
                 # Spawn in a new car if only 1 car is present
                 if len(edge.cars) < 20:
-                    edge.cars += [tsim.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None) for i in range(20-len(edge.cars))]
+                    edge.cars += [tsim.Car(0, 5, 0.2, None) for i in range(20-len(edge.cars))]
 
                 tsim.update_velocities(edge.cars)
                 tsim.update_positions(edge.cars)
