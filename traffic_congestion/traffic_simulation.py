@@ -8,7 +8,7 @@ exit_points = [250, 500, 850, 1000, 1600]         # n "out-points"
 
 safe_distance = 10
 entry_rate = 0.05
-dt = 0.5                                    # how much time passes between updates, time step
+dt = 0.01                                    # how much time passes between updates, time step
 n_cars = 20                                 # start with n cars already on the road
 
 
@@ -73,6 +73,7 @@ def remove_exiting_cars(cars):
             remaining.append(car)
     return remaining
 
+"""
 def try_add_cars(cars):
     for point in entry_points:
         if random.random() < entry_rate:
@@ -94,11 +95,11 @@ def try_add_cars(cars):
                         exit_target=random.choice(exit_points)
                     )
                 )
-        
+"""
 ## just for debugging
 def is_car_at_end_of_road(car):
     return abs(road_length - car.x) < 10
-
+"""
 if __name__ == "__main__":
     #add cars to the simulation
     cars = []
@@ -116,3 +117,4 @@ if __name__ == "__main__":
         cars = remove_exiting_cars(cars)
         try_add_cars(cars)
         print(step, len(cars), round(sum(car.v for car in cars) / len(cars), 2))
+"""
