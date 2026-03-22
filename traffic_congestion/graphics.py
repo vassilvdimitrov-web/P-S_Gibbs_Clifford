@@ -359,8 +359,8 @@ def main():
     drag_state = DragState.IDLE
     drag_idx   = None
     edit_mode  = EditMode.EDITNODES
-    cars = [tsim.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None), 
-            tsim.Car(200, random.uniform(5, tsim.v_max), 5, 0.2, None)]
+    cars = [ex.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None), 
+            ex.Car(200, random.uniform(5, tsim.v_max), 5, 0.2, None)]
     
     '''entry nodes'''
     entry_nodes = [] # Tracks the state (queues/lights) for each node
@@ -397,7 +397,7 @@ def main():
             ex.generate_entry_demand(entry_nodes, edges, len(nodes), probability=0.02)
 
             # B. Move cars from Node Queues onto the actual Edges
-        ex.process_node_entries(entry_nodes, cars)
+            ex.process_node_entries(entry_nodes, cars)
 
         # C. Physics Update
         tsim.update_velocities(cars)
