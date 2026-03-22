@@ -11,6 +11,8 @@ entry_rate = 0.05
 dt = 0.5                                    # how much time passes between updates, time step
 n_cars = 20                                 # start with n cars already on the road
 
+
+"""
 class Car:
     def __init__(self, position, velocity, length, reaction_speed, exit_target):
         self.x = position
@@ -18,7 +20,7 @@ class Car:
         self.l = length
         self.reac = reaction_speed
         self.exit = exit_target
-
+"""
 
 # make certain parts of the road with different local speed limits
 def local_speed_limit(x):

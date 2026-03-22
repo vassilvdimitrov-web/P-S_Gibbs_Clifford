@@ -361,7 +361,10 @@ def main():
     edit_mode  = EditMode.EDITNODES
     cars = [tsim.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None), 
             tsim.Car(200, random.uniform(5, tsim.v_max), 5, 0.2, None)]
-
+    
+    '''entry nodes'''
+    entry_nodes = [] # Tracks the state (queues/lights) for each node
+    cars = []        # Active cars driving on edges
 
     while not window_should_close():
         # ── Input ──────────────────────────────────────────────────────────
@@ -385,26 +388,57 @@ def main():
                     drag_state, drag_idx, nodes, edges, mouse_pos, node_hit)
 
         # Car logic
+        '''my car logic'''
+        if nodes and edges:
+        # A. Update Traffic Systems (Lights and Spawning into Queues)
+            ex.update_traffic_lights(entry_nodes)
+            node_indices = list(range(len(nodes))) 
+            """changed"""
+            ex.generate_entry_demand(entry_nodes, edges, len(nodes), probability=0.02)
 
-        #Temporary (get rid of cars at end)
+            # B. Move cars from Node Queues onto the actual Edges
+        ex.process_node_entries(entry_nodes, cars)
+
+        # C. Physics Update
+        tsim.update_velocities(cars)
+        tsim.update_positions(cars)
+        '''added nodes in this argument'''
+        # D. Transitions (Handover from one edge to the next OR exiting)
+        cars = ex.handle_edge_transitions(cars, edges, nodes)
+        '''here I added another thing'''
+        # This ensures if you clicked to add a node above,an entry_node is created for it immediately.
+        
+        if len(entry_nodes) < len(nodes):
+            for i in range(len(entry_nodes), len(nodes)):
+                entry_nodes.append(ex.EntryNode(i))
+        elif len(entry_nodes) > len(nodes):
+            entry_nodes = entry_nodes[:len(nodes)]
+            for i, enode in enumerate(entry_nodes):
+                enode.node_id = i
+        
+        """ will comment out this"""
+        """ Temporary (get rid of cars at end)
         tmp = []
         for car in cars:
             if not tsim.is_car_at_end_of_road(car):
                 tmp += [car]
         
         cars = tmp
-
+        """
         # Spawn in a new car if only 1 car is present
-        if len(cars) == 1:
-            cars += [tsim.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None)]
+        ''''deleted this part
+if len(cars) == 1:
+    cars += [tsim.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None)]'''
 
-        tsim.update_velocities(cars)
+        """will comment out this part too"""
+        """  tsim.update_velocities(cars)
         tsim.update_positions(cars)
-
+      """
         # ── Drawing ────────────────────────────────────────────────────────
         begin_drawing()
         clear_background(WHITE)
 
+        draw_text(f"Cars: {len(cars)}", 20, 80, 20, RED)
         # Re-draw UI on top (begin_drawing clears)
         edit_mode = draw_ui(edit_mode, mouse_pos)
 
@@ -450,9 +484,32 @@ def main():
         # ── Car Drawing ────────────────────────────────────────────────────
         if edges:
             for car in cars:
-                t = edges[0].r_proportional(tsim.car_relative_position(car), nodes)
-                pos = edges[0].point_at(t, nodes)
-                draw_circle(int(pos[0]), int(pos[1]), 4, Color(180, 180, 255, 255))
+                # Use the length of the specific edge the car is currently on
+                edge_len = car.current_edge.total_length(nodes)
+                if edge_len > 0:
+                    relative_pos = car.x / edge_len
+                    # Ensure we don't go out of bounds before the transition logic catches it
+                    relative_pos = max(0, min(1, relative_pos))
+                    
+                    t = car.current_edge.r_proportional(relative_pos, nodes)
+                    pos = car.current_edge.point_at(t, nodes)
+                    
+                    # Draw car - different color for active cars
+                    draw_circle(int(pos[0]), int(pos[1]), 5, RED)
+
+            # --- Draw Queue counts above nodes ---
+            for node in entry_nodes:
+                pos = nodes[node.node_id]
+    
+                # 2. Determine the color based on the entry light state
+                light_color = GREEN if node.entry_green else RED
+                
+                # 3. Now draw the light (using the 'pos' we just defined)
+                draw_circle(int(pos[0]) + 20, int(pos[1]), 5, light_color)
+                
+                # 4. Draw the queue count if anyone is waiting
+                if node.waiting_queue:
+                    draw_text(str(len(node.waiting_queue)), int(pos[0]) - 5, int(pos[1]) - 25, 12, DARKGRAY)
 
         end_drawing()
 

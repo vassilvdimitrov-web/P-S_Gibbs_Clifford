@@ -1,164 +1,119 @@
 import random
+import numpy as np
 
-
-#suggestions
 class EntryNode:
-    def __init__(self, linear_pos, node_id):
-        self.linear_pos = linear_pos
+    def __init__(self, node_id):
         self.node_id = node_id
         self.waiting_queue = []
-
         # Traffic light states
         self.entry_green = False
         self.main_green = True
-
         self.timer = 0
         self.phase_duration = random.randint(150, 300)
 
 class Car:
-    def __init__(self, position, velocity, reaction_speed, exit_pos, length=4.5):
-        self.x = position
+    def __init__(self, current_edge, velocity, reaction_speed, destination_node_idx, length=4.5):
+        self.current_edge = current_edge 
+        self.x = 0.0 
         self.v = velocity
         self.reac = reaction_speed
-        self.exit = exit_pos  
         self.l = length
-        
-        self.is_waiting_to_enter = False
+        self.destination_node_idx = destination_node_idx
+        self.is_waiting_to_enter = True
 
-def update_velocities_with_exits(cars, road_length):
-    """Behavioral logic: slow down cars as they approach their exit."""
-    for car in cars:
-        dist_to_exit = (car.exit - car.x) % road_length
-        if dist_to_exit < 100: 
-            # Smoothly reduce speed to an "exit speed" (e.g., 10)
-            car.v = max(10, car.v - (2 * car.reac))
+def can_safely_enter(target_edge, active_cars, safe_distance=0.5):
+    """
+    Checks if the start of a specific edge is clear.
 
-def can_safely_enter(entry_pos, active_cars, road_length, safe_distance=15):
-    """Math logic: Check both behind (Lag) and ahead (Lead) before merging."""
-    lag_car = None
-    min_lag_dist = float('inf')
-    lead_car = None
-    min_lead_dist = float('inf')
-
+    """
     for car in active_cars:
-        # 1. Check behind (Lag)
-        dist_behind = (entry_pos - car.x) % road_length
-        if dist_behind < min_lag_dist:
-            min_lag_dist = dist_behind
-            lag_car = car
-            
-        # 2. Check ahead (Lead)
-        dist_ahead = (car.x - entry_pos) % road_length
-        if dist_ahead < min_lead_dist:
-            min_lead_dist = dist_ahead
-            lead_car = car
-
-    # Check Lag Car (The one approaching the node)
-    if lag_car:
-        required_lag_gap = (lag_car.v * lag_car.reac) + safe_distance
-        if min_lag_dist < required_lag_gap:
-            return False
-            
-    # Check Lead Car (The one just past the node)
-    if lead_car:
-        if min_lead_dist < 15: # Constant buffer to avoid spawning inside someone
-            return False
-
+        # We only care about cars ALREADY on the edge we want to join
+        if car.current_edge == target_edge:
+            # If a car is within the safe distance from the start of the curve
+            if car.x < safe_distance:
+                return False
     return True
-    
-def is_gap_safe(approaching_car, entry_node_pos, road_length, safe_buffer=10):
-    """
-    Logic: The approaching car needs time to see the new car and brake.
-    Required Distance = (Velocity * Reaction Time) + Physical Buffer
-    """
-    dist_to_node = (entry_node_pos - approaching_car.x) % road_length
-    
-    # The 'reac' parameter from your Traffic Sim (0.3 to 2.0)
-    # Higher reaction speed value = slower response = needs more distance
-    required_dist = (approaching_car.v * approaching_car.reac) + safe_buffer
-    
-    return dist_to_node > required_dist
 
-def process_node_entries(entry_nodes, active_cars, road_length):
+def process_node_entries(entry_nodes, active_cars):
     """
-    Checks all entry nodes. If a car is waiting and the road is safe,
-    it moves the car from the queue to the active road.
+    Checks all entry nodes. If a car is waiting and its path is clear,
+    it moves from the queue to the active car list.
     """
     for node in entry_nodes:
-        if node.waiting_queue:
-            # Check the car at the front of the line
+        if node.waiting_queue and node.entry_green: 
             next_car = node.waiting_queue[0]
-            
-            if can_safely_enter(node.linear_pos, active_cars, road_length, safe_distance=15):
-                # Remove from queue and mark as active
+            if can_safely_enter(next_car.current_edge, active_cars):
                 entering_car = node.waiting_queue.pop(0)
                 entering_car.is_waiting_to_enter = False
-                entering_car.x = node.linear_pos
+                entering_car.x = 0.0  # <--- FORCE START AT BEGINNING
                 active_cars.append(entering_car)
 
-def handle_exits(active_cars, road_length, exit_threshold=5):
-    """Removes cars from the simulation once they reach their exit."""
-    for i in range(len(active_cars) - 1, -1, -1):
-        car = active_cars[i]
-        dist = min(abs(car.x - car.exit), road_length - abs(car.x - car.exit))
-        
-        if dist < exit_threshold:
-            active_cars.pop(i)
-            # You could add a 'score' or 'counter' here for your group stats
-            
-def generate_entry_demand(entry_nodes, exit_points, probability=0.05, max_q=5):
-    """
-    Randomly adds new cars to the waiting queues of entry nodes.
-    This simulates people 'arriving' at the intersection.
-    """
-    import random
-    for node in entry_nodes:
-        if len(node.waiting_queue) < max_q:
-            if random.random() < probability:
-                new_car = Car(
-                    position=node.linear_pos, 
-                    velocity=0, 
-                    reaction_speed=random.uniform(0.5, 1.5),
-                    exit_pos=random.choice(exit_points)
-                )
-                new_car.is_waiting_to_enter = True
-                node.waiting_queue.append(new_car)
-#for traffic sim
+                
 def handle_edge_transitions(cars, edges, nodes):
+    """
+    Logic for cars reaching the end of a Bezier curve.
+    Either exits or picks a new edge.
+    """
+    remaining_cars = []
     for car in cars:
-        current_edge = edges[car.current_edge_idx]
-        edge_len = current_edge.total_length(nodes)
+        edge_len = car.current_edge.total_length(nodes)
         
         if car.x >= edge_len:
-            # Look for the next edge starting where this one ends
-            next_edge_found = False
-            for idx, next_edge in enumerate(edges):
-                if next_edge.node0 == current_edge.node1:
-                    car.current_edge_idx = idx
-                    car.x = 0  # Reset progress to start of new edge
-                    next_edge_found = True
-                    break
+            # Check if this node is the destination
+            if car.current_edge.node1 == car.destination_node_idx:
+                continue # Exit car (don't add to remaining)
             
-            # If no next edge (dead end), the car exits
-            if not next_edge_found:
-                car.v = 0 # Optional
+            # Find next edges
+            next_options = [e for e in edges if e.node0 == car.current_edge.node1]
+            
+            if next_options:
+                car.current_edge = random.choice(next_options)
+                car.x = 0
+                remaining_cars.append(car)
+            else:
+                pass # Dead end, car exits
+        else:
+            remaining_cars.append(car)
+    return remaining_cars
+
+def generate_entry_demand(entry_nodes, edges, node_count, probability=0.05):
+    """
+    Adds cars to node queues and assigns them a starting edge and destination.
+    """
+    for node in entry_nodes:
+        if random.random() < probability:
+            # Find edges starting at this node
+            outgoing = [e for e in edges if e.node0 == node.node_id]
+            if outgoing:
+                start_edge = random.choice(outgoing)
+                # Pick a random destination node index
+                dest = random.choice([i for i in range(node_count) if i != node.node_id])
+                
+                new_car = Car(start_edge, random.uniform(2, 5), random.uniform(0.5, 1.5), dest)
+                node.waiting_queue.append(new_car)
+
 def update_traffic_lights(entry_nodes):
     for node in entry_nodes:
         node.timer += 1
-
         if node.timer > node.phase_duration:
             node.entry_green = not node.entry_green
             node.main_green = not node.main_green
             node.timer = 0
 
-            #in simulation:
-def apply_traffic_lights(cars, entry_nodes, road_length):
+def apply_traffic_lights(cars, entry_nodes, nodes):
+    """
+    Slows cars down if they are approaching a node with a red light.
+    """
     for car in cars:
-        for node in entry_nodes:
-            dist = (node.linear_pos - car.x) % road_length
-
-            # Only care about cars approaching node
-            if 0 < dist < 50:  # "visibility distance"
-                if not node.main_green:
-                    # Slow down smoothly
-                    car.v = max(0, car.v - 2 * car.reac)
+        # The node the car is approaching is node1 of its current edge
+        target_node_id = car.current_edge.node1
+        
+        # Find the matching entry_node logic
+        for enode in entry_nodes:
+            if enode.node_id == target_node_id:
+                edge_len = car.current_edge.total_length(nodes)
+                dist_to_node = edge_len - car.x
+                
+                if 0 < dist_to_node < 60: # Visibility distance
+                    if not enode.main_green:
+                        car.v = max(0, car.v - 2 * car.reac)
