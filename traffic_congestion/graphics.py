@@ -205,7 +205,9 @@ class ExitNode():
 class Edge:
     bezier: QuadraticBezier
     node_type: EntryNode | ExitNode = field(default_factory=EntryNode)
-    cars: List[tsim.Car] = field(default_factory=list)
+    cars: List[eti.Car] = field(default_factory=list)
+    def total_length(self, nodes):
+        return self.bezier.total_length(nodes)  
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -512,28 +514,19 @@ def main():
     init_window(WINDOW_W, WINDOW_H, "")
     set_target_fps(60)
 
-<<<<<<< HEAD
     nodes      = []
     edges      = []
     drag_state = DragState.IDLE
     drag_idx   = None
     edit_mode  = EditMode.EDITNODES
-    cars = [ex.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None), 
-            ex.Car(200, random.uniform(5, tsim.v_max), 5, 0.2, None)]
+    cars = [eti.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None), 
+            eti.Car(200, random.uniform(5, tsim.v_max), 5, 0.2, None)]
+    selected_node = None 
+    node_types = {} 
     
     '''entry nodes'''
     entry_nodes = [] # Tracks the state (queues/lights) for each node
     cars = []        # Active cars driving on edges
-=======
-    nodes                  = []
-    edges : List[Edge]     = []
-    node_types             = {}   # {node_idx: EntryNode | ExitNode}  absent = plain node
-    drag_state             = DragState.IDLE
-    drag_idx               = None
-    edit_mode              = EditMode.EDITNODES
-    selected_node          = None
-
->>>>>>> 48169424e0dd2fdd7c5365f291d39cb53998bfbe
 
     while not window_should_close():
         # ── Input ──────────────────────────────────────────────────────────
@@ -559,30 +552,30 @@ def main():
                     drag_state, drag_idx, nodes, edges, mouse_pos, node_hit)
 
         # Car logic
-<<<<<<< HEAD
         '''my car logic'''
         if nodes and edges:
         # A. Update Traffic Systems (Lights and Spawning into Queues)
-            ex.update_traffic_lights(entry_nodes)
+            eti.update_traffic_lights(entry_nodes)
+            eti.apply_traffic_lights(cars, entry_nodes, nodes)
             node_indices = list(range(len(nodes))) 
             """changed"""
-            ex.generate_entry_demand(entry_nodes, edges, len(nodes), probability=0.02)
+            eti.generate_entry_demand(entry_nodes, edges, len(nodes), probability=0.02)
 
             # B. Move cars from Node Queues onto the actual Edges
-            ex.process_node_entries(entry_nodes, cars)
+            eti.process_node_entries(entry_nodes, cars)
 
         # C. Physics Update
         tsim.update_velocities(cars)
         tsim.update_positions(cars)
         '''added nodes in this argument'''
         # D. Transitions (Handover from one edge to the next OR exiting)
-        cars = ex.handle_edge_transitions(cars, edges, nodes)
+        cars = eti.handle_edge_transitions(cars, edges, nodes)
         '''here I added another thing'''
         # This ensures if you clicked to add a node above,an entry_node is created for it immediately.
         
         if len(entry_nodes) < len(nodes):
             for i in range(len(entry_nodes), len(nodes)):
-                entry_nodes.append(ex.EntryNode(i))
+                entry_nodes.append(eti.EntryNode(i))
         elif len(entry_nodes) > len(nodes):
             entry_nodes = entry_nodes[:len(nodes)]
             for i, enode in enumerate(entry_nodes):
@@ -606,25 +599,6 @@ if len(cars) == 1:
         """  tsim.update_velocities(cars)
         tsim.update_positions(cars)
       """
-=======
-        for _ in range(10):
-            for edge in edges:
-                #Temporary (get rid of cars at end)
-                tmp = []
-                for car in edge.cars:
-                    if not abs(edge.bezier.total_length(nodes)-car.x) < 1:
-                        tmp += [car]
-
-                edge.cars = tmp
-
-                # Spawn in a new car if only 1 car is present
-                if len(edge.cars) < 20:
-                    edge.cars += [tsim.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None) for i in range(20-len(edge.cars))]
-
-                tsim.update_velocities(edge.cars)
-                tsim.update_positions(edge.cars)
-
->>>>>>> 48169424e0dd2fdd7c5365f291d39cb53998bfbe
         # ── Drawing ────────────────────────────────────────────────────────
         begin_drawing()
         clear_background(WHITE)
@@ -691,18 +665,17 @@ if len(cars) == 1:
 
 
         # ── Car Drawing ────────────────────────────────────────────────────
-<<<<<<< HEAD
         if edges:
             for car in cars:
                 # Use the length of the specific edge the car is currently on
-                edge_len = car.current_edge.total_length(nodes)
+                edge_len = car.current_edge.bezier.total_length(nodes)
                 if edge_len > 0:
                     relative_pos = car.x / edge_len
                     # Ensure we don't go out of bounds before the transition logic catches it
                     relative_pos = max(0, min(1, relative_pos))
                     
-                    t = car.current_edge.r_proportional(relative_pos, nodes)
-                    pos = car.current_edge.point_at(t, nodes)
+                    t = car.current_edge.bezier.r_proportional(relative_pos, nodes)
+                    pos = car.current_edge.bezier.point_at(t, nodes)
                     
                     # Draw car - different color for active cars
                     draw_circle(int(pos[0]), int(pos[1]), 5, RED)
@@ -720,13 +693,6 @@ if len(cars) == 1:
                 # 4. Draw the queue count if anyone is waiting
                 if node.waiting_queue:
                     draw_text(str(len(node.waiting_queue)), int(pos[0]) - 5, int(pos[1]) - 25, 12, DARKGRAY)
-=======
-        for edge in edges:
-            for car in edge.cars:
-                t = edge.bezier.r_proportional(car.x/edge.bezier.total_length(nodes), nodes)
-                pos = edge.bezier.point_at(t, nodes)
-                draw_circle(int(pos[0]), int(pos[1]), 4, Color(180, 180, 255, 255))
->>>>>>> 48169424e0dd2fdd7c5365f291d39cb53998bfbe
 
         end_drawing()
 

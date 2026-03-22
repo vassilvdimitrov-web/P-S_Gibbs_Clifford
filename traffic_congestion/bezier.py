@@ -10,8 +10,12 @@ class QuadraticBezier:
             np.array(p1, dtype=float),
             np.array(p2, dtype=float),
         ]
+        self.ctrl  = (nodes[node0] + nodes[node1]) / 2.0
+        self.node0 = node0
+        self.node1 = node1
         self.dragging = None
-
+        self._r_prop_fn = None
+        
     def update(self, mouse, pressed, released):
         if pressed and self.dragging is None:
             for i, p in enumerate(self.points):

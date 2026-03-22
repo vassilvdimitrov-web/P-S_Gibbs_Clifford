@@ -36,42 +36,43 @@ def can_safely_enter(target_edge, active_cars, safe_distance=0.5):
 
 def process_node_entries(entry_nodes, active_cars):
     """
-    Checks all entry nodes. If a car is waiting and its path is clear,
-    it moves from the queue to the active car list.
+    Moves cars from queue to road ONLY if the entry light is green
+    AND there is enough space to merge safely.
     """
     for node in entry_nodes:
-        if node.waiting_queue and node.entry_green: 
+        # Step 1: Is someone waiting AND is the light green?
+        if len(node.waiting_queue) > 0 and node.entry_green: 
             next_car = node.waiting_queue[0]
-            if can_safely_enter(next_car.current_edge, active_cars):
+            
+            # Step 2: Is there a gap in the ring road traffic?
+            if can_safely_enter(next_car.current_edge, active_cars, safe_distance=25.0):
                 entering_car = node.waiting_queue.pop(0)
                 entering_car.is_waiting_to_enter = False
-                entering_car.x = 0.0  # <--- FORCE START AT BEGINNING
+                entering_car.x = 0.0
                 active_cars.append(entering_car)
 
                 
 def handle_edge_transitions(cars, edges, nodes):
-    """
-    Logic for cars reaching the end of a Bezier curve.
-    Either exits or picks a new edge.
-    """
     remaining_cars = []
     for car in cars:
-        edge_len = car.current_edge.total_length(nodes)
+        # 1. Use the bezier attribute to get length
+        edge_len = car.current_edge.bezier.total_length(nodes)
         
         if car.x >= edge_len:
-            # Check if this node is the destination
-            if car.current_edge.node1 == car.destination_node_idx:
-                continue # Exit car (don't add to remaining)
+            # 2. Check destination using .bezier.node1
+            if car.current_edge.bezier.node1 == car.destination_node_idx:
+                continue # Car successfully exited the system
             
-            # Find next edges
-            next_options = [e for e in edges if e.node0 == car.current_edge.node1]
+            # 3. Find next options looking at .bezier.node0 and .bezier.node1
+            next_options = [e for e in edges if e.bezier.node0 == car.current_edge.bezier.node1]
             
             if next_options:
                 car.current_edge = random.choice(next_options)
                 car.x = 0
                 remaining_cars.append(car)
             else:
-                pass # Dead end, car exits
+                # Dead end - car removes itself
+                pass 
         else:
             remaining_cars.append(car)
     return remaining_cars
@@ -83,7 +84,7 @@ def generate_entry_demand(entry_nodes, edges, node_count, probability=0.05):
     for node in entry_nodes:
         if random.random() < probability:
             # Find edges starting at this node
-            outgoing = [e for e in edges if e.node0 == node.node_id]
+            outgoing = [e for e in edges if e.bezier.node0 == node.node_id]
             if outgoing:
                 start_edge = random.choice(outgoing)
                 # Pick a random destination node index
@@ -101,19 +102,14 @@ def update_traffic_lights(entry_nodes):
             node.timer = 0
 
 def apply_traffic_lights(cars, entry_nodes, nodes):
-    """
-    Slows cars down if they are approaching a node with a red light.
-    """
     for car in cars:
-        # The node the car is approaching is node1 of its current edge
-        target_node_id = car.current_edge.node1
-        
-        # Find the matching entry_node logic
+        target_node_id = car.current_edge.bezier.node1
         for enode in entry_nodes:
             if enode.node_id == target_node_id:
-                edge_len = car.current_edge.total_length(nodes)
-                dist_to_node = edge_len - car.x
+                edge_len = car.current_edge.bezier.total_length(nodes)
+                dist_to_light = edge_len - car.x
                 
-                if 0 < dist_to_node < 60: # Visibility distance
+                # Only stop if the car is close to the intersection (e.g., within 40 pixels)
+                if dist_to_light < 40: 
                     if not enode.main_green:
-                        car.v = max(0, car.v - 2 * car.reac)
+                        car.v = 0  # Stop at the red light
