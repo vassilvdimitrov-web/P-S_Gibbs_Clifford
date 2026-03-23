@@ -11,7 +11,7 @@ from typing import List
 
 import traffic_simulation as tsim
 import entexi as eti
-
+from metrics import TrafficMetrics
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -277,6 +277,8 @@ def update_node_mode(drag_state, drag_idx, nodes, edges, node_types, mouse_pos,
                     return DragState.DRAGGING, node_hit, selected_node
                 else:
                     nodes.append(mp.copy())
+                    new_idx = len(nodes) - 1
+                    node_types[new_idx] = EntryNode()
 
         case DragState.DRAGGING:
             # Move the node continuously while dragging
@@ -519,14 +521,17 @@ def main():
     drag_state = DragState.IDLE
     drag_idx   = None
     edit_mode  = EditMode.EDITNODES
-    cars = [eti.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None), 
-            eti.Car(200, random.uniform(5, tsim.v_max), 5, 0.2, None)]
+    
+    #cars = [eti.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None), 
+    #        eti.Car(200, random.uniform(5, tsim.v_max), 5, 0.2, None)]
     selected_node = None 
     node_types = {} 
     
     '''entry nodes'''
     entry_nodes = [] # Tracks the state (queues/lights) for each node
     cars = []        # Active cars driving on edges
+
+    metrics = TrafficMetrics(road_length=1.0, v_max=tsim.v_max)
 
     while not window_should_close():
         # ── Input ──────────────────────────────────────────────────────────
@@ -551,13 +556,31 @@ def main():
                 drag_state, drag_idx = update_edge_mode(
                     drag_state, drag_idx, nodes, edges, mouse_pos, node_hit)
 
+
+
+        #only nodes marked as Entry generate cars and have queue/light logic.
+
+        #collects the indices of all nodes that are currently marked as EntryNode
+        entry_ids = [i for i, nt in node_types.items() if isinstance(nt, EntryNode)]
+        #remove helper objects from entry_nodes if their node is no longer marked as Entry
+        entry_nodes = [en for en in entry_nodes if en.node_id in entry_ids]             
+
+        existing_ids = [en.node_id for en in entry_nodes]
+        #for every node that should be Entry, check whether it already has an eti.EntryNode helper object.
+        #ff not, add it to the list
+        for node_id in entry_ids:
+            if node_id not in existing_ids:
+                entry_nodes.append(eti.EntryNode(node_id))
+
+
+
         # Car logic
         '''my car logic'''
         if nodes and edges:
         # A. Update Traffic Systems (Lights and Spawning into Queues)
             eti.update_traffic_lights(entry_nodes)
             eti.apply_traffic_lights(cars, entry_nodes, nodes)
-            node_indices = list(range(len(nodes))) 
+            #node_indices = list(range(len(nodes))) 
             """changed"""
             eti.generate_entry_demand(entry_nodes, edges, node_types, probability=0.02)
 
@@ -565,14 +588,28 @@ def main():
             eti.process_node_entries(entry_nodes, cars)
 
         # C. Physics Update
-        tsim.update_velocities(cars)
-        tsim.update_positions(cars)
+        tsim.update_velocities(cars, nodes, edges)
+        tsim.update_positions(cars, nodes, edges)
         '''added nodes in this argument'''
         # D. Transitions (Handover from one edge to the next OR exiting)
         cars = eti.handle_edge_transitions(cars, edges, nodes)
         '''here I added another thing'''
         # This ensures if you clicked to add a node above,an entry_node is created for it immediately.
         
+
+
+        # Metrics update
+        total_road_length = 0.0
+        for edge in edges:
+            total_road_length += edge.bezier.total_length(nodes)        #total length should be the sum of all edge lengths
+
+        metrics.road_length = total_road_length if total_road_length > 0 else 1.0
+        metrics.compute(cars, entry_nodes)
+
+
+
+        #we don't want this because it forces ALL nodes to behave like Entry nodes and it ignores the UI completely
+        """
         if len(entry_nodes) < len(nodes):
             for i in range(len(entry_nodes), len(nodes)):
                 entry_nodes.append(eti.EntryNode(i))
@@ -580,7 +617,9 @@ def main():
             entry_nodes = entry_nodes[:len(nodes)]
             for i, enode in enumerate(entry_nodes):
                 enode.node_id = i
+        """
         
+
         """ will comment out this"""
         """ Temporary (get rid of cars at end)
         tmp = []
@@ -678,7 +717,9 @@ if len(cars) == 1:
                     pos = car.current_edge.bezier.point_at(t, nodes)
                     
                     # Draw car - different color for active cars
-                    draw_circle(int(pos[0]), int(pos[1]), 5, RED)
+                    #draw_circle(int(pos[0]), int(pos[1]), 5, RED)
+                    car_color = PURPLE if getattr(car, "is_bad_driver", False) else RED
+                    draw_circle(int(pos[0]), int(pos[1]), 5, car_color)
 
             # --- Draw Queue counts above nodes ---
             for node in entry_nodes:
@@ -695,7 +736,7 @@ if len(cars) == 1:
                     draw_text(str(len(node.waiting_queue)), int(pos[0]) - 5, int(pos[1]) - 25, 12, DARKGRAY)
 
         end_drawing()
-
+    metrics.save("traffic_data.csv")
     close_window()
 
 

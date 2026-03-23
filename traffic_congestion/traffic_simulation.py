@@ -1,120 +1,140 @@
 import random
 
 
-road_length = 2000
-v_max = 50
-entry_points = [100,400, 500, 900, 1300]    # k "in-points" 
-exit_points = [250, 500, 850, 1000, 1600]         # n "out-points"
+v_max = 50.0
 
 safe_distance = 10
-entry_rate = 0.05
 dt = 0.01                                    # how much time passes between updates, time step
-n_cars = 20                                 # start with n cars already on the road
+
+bad_driver_safe_distance_factor = 1.5
+bad_driver_acceleartion_factor = 0.7
+bad_driver_safe_brake_factor = 1.5
+
+default_acceleration = 3.0
+default_brake_factor = 5.0
 
 
 """
 class Car:
-    def __init__(self, position, velocity, length, reaction_speed, exit_target):
-        self.x = position
+    def __init__(self, current_edge, velocity, reaction_speed, length, destination_node_idx, is_bad_driver=False):
+        self.current_edge = current_edge
+        self.x = 0.0       
         self.v = velocity
-        self.l = length
         self.reac = reaction_speed
-        self.exit = exit_target
+        self.l = length
+        self.destination_node_idx = destination_node_idx
+        self.is_bad_driver = is_bad_driver
+        self.is_waiting_to_enter = True
 """
 
-# make certain parts of the road with different local speed limits
-def local_speed_limit(x):
-    """
-    if 300 <= x < 500:
-        return 20
-    elif 900 <= x < 1100:
-        return 30
-    else:
-    """
+def local_speed_limit(x,edge=None):
+    if edge is not None and hasattr(edge, "speed_limit"):
+        return float(edge.speed_limit)
     return v_max
 
+#return all the cars driving on this edge
+def cars_on_edge(cars,edge):
+    result = []
+    for car in cars:
+        if car.current_edge is edge and not car.is_waiting_to_enter:
+            result.append(car)
+    return result
 
-def distance_to_next_car(car, next_car):
-    d = next_car.x - car.x
-    if d < 0:
-        d += road_length
-    return d
+def next_car_ahead(car, edge_cars):
+    ahead = []
+    for other in edge_cars:
+        if other is not car and other.x > car.x:
+            ahead.append(other)
 
-def car_relative_position(car):
-    return car.x / road_length
+    if len(ahead) == 0:
+        return None
 
-# change speed depending on the the distance to the car in front
-def update_velocities(cars):
-    cars.sort(key=lambda car: car.x)                # sort the cars with respect to position
-    for i in range(len(cars)):
-        car = cars[i]
-        next_car = cars[(i + 1) % len(cars)]
-        gap = distance_to_next_car(car, next_car) - next_car.l
-        limit = local_speed_limit(car.x)
+    leader = ahead[0]
+    for other in ahead[1:]:
+        if other.x < leader.x:
+            leader = other
+    return leader
 
-        if gap < safe_distance:
-            car.v = max(0, car.v - 5 * car.reac)
+def gap_to_next_car(car, leader):
+    gap = leader.x - car.x - leader.l
+    if (gap < 0.0):
+        return 0.0
+    return gap
+
+def edge_length(edge, nodes):
+    return float(edge.bezier.total_length(nodes))
+
+#update velocities for all active cars on one edge.
+#bad drivers leave larger gaps, accelerate less, and brake harde
+def update_velocities_on_edge(edge, cars, nodes):
+    edge_cars = cars_on_edge(cars, edge)
+    edge_cars.sort(key=lambda c: c.x)
+
+    for car in edge_cars:
+        if getattr(car, "is_bad_driver", False):
+            safe_dist = safe_distance * bad_driver_safe_distance_factor
+            accel = default_acceleration * bad_driver_acceleartion_factor
+            brake = default_brake_factor * bad_driver_safe_brake_factor
         else:
-            car.v = min(limit, car.v + 1)
+            safe_dist = safe_distance
+            accel = default_acceleration
+            brake = default_brake_factor
 
-# x(t + dt) = x(t) + v*dt
-def update_positions(cars):
+        leader = next_car_ahead(car, edge_cars)
+        limit = local_speed_limit(car.x, edge)
+
+        if leader is None:
+            car.v = min(limit, car.v + accel)
+        else:
+            gap = gap_to_next_car(car, leader)
+
+            if gap < safe_dist:
+                car.v = max(0.0, car.v - brake * car.reac)
+            else:
+                car.v = min(limit, car.v + accel)
+
+def update_positions_on_edge(edge, cars, nodes):       
+    length = edge_length(edge, nodes)
     for car in cars:
-        car.x = (car.x + car.v * dt) % road_length  # stay on the road (reapeat the circle)
+        if car.current_edge is not edge:
+            continue
+        if car.is_waiting_to_enter:
+            continue
 
-def remove_exiting_cars(cars):
-    remaining = []
-    for car in cars:
-        d = abs(car.x - car.exit)                   # distance to exit
-        d = min(d, road_length - d)                 # minimal distance (beacuse of the circle 
-                                                    # we can pass the 0 point when we have are 
-                                                    # at the "end" of the road
-        if d > 5:                                   # if car is close (≤5) to exit remove it
-            remaining.append(car)
-    return remaining
+        car.x += car.v * dt
 
-"""
-def try_add_cars(cars):
-    for point in entry_points:
-        if random.random() < entry_rate:
-            too_close = False
-            for car in cars:
-                d = abs(car.x - point)
-                d = min(d, road_length - d)
-                if d < safe_distance:               # if there is no space -> can't enter
-                    too_close = True
-                    break
+        if car.x > length:
+            car.x = length
 
-            if not too_close:
-                cars.append(
-                    Car(
-                        position=point,
-                        velocity=5,
-                        length=random.uniform(2, 4),
-                        reaction_speed=random.uniform(0.5, 1.5),
-                        exit_target=random.choice(exit_points)
-                    )
-                )
-"""
-## just for debugging
-def is_car_at_end_of_road(car):
-    return abs(road_length - car.x) < 10
-"""
-if __name__ == "__main__":
-    #add cars to the simulation
-    cars = []
-    for _ in range(n_cars):                        
-        x = random.uniform(0, road_length)
-        v = random.uniform(5, v_max)
-        l = random.uniform(2, 4)
-        reac = random.uniform(0.30, 2.0)
-        exit = random.choice(exit_points)
-        cars.append(Car(x, v, l, reac, exit))
 
-    for step in range(200):
-        update_velocities(cars)
-        update_positions(cars)
-        cars = remove_exiting_cars(cars)
-        try_add_cars(cars)
-        print(step, len(cars), round(sum(car.v for car in cars) / len(cars), 2))
-"""
+#so we could use update_velocities(cars, nodes, edges) directly
+def update_velocities(cars, nodes, edges=None):
+    if edges is None:
+        edges = []
+        for car in cars:
+            if not car.is_waiting_to_enter and car.current_edge is not None:
+                if car.current_edge not in edges:
+                    edges.append(car.current_edge)
+
+    for edge in edges:
+        update_velocities_on_edge(
+            edge=edge,
+            cars=cars,
+            nodes=nodes,
+        )
+def update_positions(cars, nodes, edges=None):
+    if edges is None:
+        edges = []
+        for car in cars:
+            if not car.is_waiting_to_enter and car.current_edge is not None:
+                if car.current_edge not in edges:
+                    edges.append(car.current_edge)
+
+    for edge in edges:
+        update_positions_on_edge(
+            edge=edge,
+            cars=cars,
+            nodes=nodes,
+        )
+
+

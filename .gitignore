@@ -5,3 +5,4 @@ Tutorial_2_vf.ipynb
 *.pkl
 __pycache__
 .DS_Store
+traffic_data.csv

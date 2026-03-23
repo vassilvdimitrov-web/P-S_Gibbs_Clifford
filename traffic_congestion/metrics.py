@@ -17,13 +17,22 @@ class TrafficMetrics:
             flow = density * avg_v
 
         # congestion definition
-        congested = avg_v < 0.5 * self.v_max if cars else False
+        #congested = avg_v < 0.5 * self.v_max if cars else False
 
         # queue info (for traffic lights analysis)
         if entry_nodes:
             avg_queue = sum(len(n.waiting_queue) for n in entry_nodes) / len(entry_nodes)
+            max_queue = max(len(n.waiting_queue) for n in entry_nodes)
         else:
             avg_queue = 0
+            max_queue = 0
+
+        congested = False
+        if cars:
+            if avg_v < 0.7 * self.v_max:    #35
+                congested = True
+        if avg_queue > 20 or max_queue > 30:
+                congested = True
 
         self.history.append({
             "density": density,
@@ -31,13 +40,14 @@ class TrafficMetrics:
             "flow": flow,
             "congested": congested,
             "cars": len(cars),
-            "queue": avg_queue
+            "queue": avg_queue,
+            "max_queue": max_queue
         })
 
     def save(self, filename="traffic_data.csv"):
         with open(filename, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=[
-                "density", "velocity", "flow", "congested", "cars", "queue"
+                "density", "velocity", "flow", "congested", "cars", "queue", "max_queue"
             ])
             writer.writeheader()
             writer.writerows(self.history)
