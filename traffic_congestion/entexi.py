@@ -12,13 +12,14 @@ class EntryNode:
         self.phase_duration = random.randint(150, 300)
 
 class Car:
-    def __init__(self, current_edge, velocity, reaction_speed, destination_node_idx, length=4.5):
+    def __init__(self, current_edge, velocity, reaction_speed, destination_node_idx, length=4.5, is_bad_driver=False):
         self.current_edge = current_edge 
         self.x = 0.0 
         self.v = velocity
         self.reac = reaction_speed
         self.l = length
         self.destination_node_idx = destination_node_idx
+        self.is_bad_driver = is_bad_driver
         self.is_waiting_to_enter = True
 
 def can_safely_enter(target_edge, active_cars, safe_distance=0.5):
@@ -90,7 +91,15 @@ def generate_entry_demand(entry_nodes, edges, node_count, probability=0.05):
                 # Pick a random destination node index
                 dest = random.choice([i for i in range(node_count) if i != node.node_id])
                 
-                new_car = Car(start_edge, random.uniform(2, 5), random.uniform(0.5, 1.5), dest)
+                #new_car = Car(start_edge, random.uniform(2, 5), random.uniform(0.5, 1.5), dest)
+                is_bad = random.random() < 0.10   # 15% bad drivers
+                new_car = Car(
+                    start_edge,
+                    random.uniform(2, 5),
+                    random.uniform(0.5, 1.5),
+                    dest,
+                    is_bad_driver=is_bad
+                )
                 node.waiting_queue.append(new_car)
 
 def update_traffic_lights(entry_nodes):
