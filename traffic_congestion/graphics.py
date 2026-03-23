@@ -736,7 +736,9 @@ if len(cars) == 1:
                     draw_text(str(len(node.waiting_queue)), int(pos[0]) - 5, int(pos[1]) - 25, 12, DARKGRAY)
 
         end_drawing()
-    metrics.save("traffic_data.csv")
+    
+    metrics.compute(cars, entry_nodes)
+    metrics.save("traffic_data.npz")
     close_window()
 
 

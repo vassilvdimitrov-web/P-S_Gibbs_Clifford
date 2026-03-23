@@ -1,4 +1,4 @@
-import csv
+import numpy as np
 
 class TrafficMetrics:
     def __init__(self, road_length, v_max):
@@ -44,13 +44,27 @@ class TrafficMetrics:
             "max_queue": max_queue
         })
 
-    def save(self, filename="traffic_data.csv"):
-        with open(filename, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=[
-                "density", "velocity", "flow", "congested", "cars", "queue", "max_queue"
-            ])
-            writer.writeheader()
-            writer.writerows(self.history)
+    def save(self, filename="traffic_data.npz"):
+        dtype = np.dtype([
+            ("density", np.float64),
+            ("velocity", np.float64),
+            ("flow", np.float64),
+            ("congested", np.bool_),
+            ("cars", np.int64),
+            ("queue", np.float64),
+            ("max_queue", np.int64),
+        ])
+        arr = np.array(
+            [(h["density"], h["velocity"], h["flow"], h["congested"], h["cars"], h["queue"], h["max_queue"])
+             for h in self.history],
+            dtype=dtype,
+        )
+        np.savez_compressed(filename, traffic=arr)
+    
+    @staticmethod
+    def load(filename="traffic_data.npz"):
+        arr = np.load(filename)
+        return arr
 
     def first_congestion_step(self):
         for i, h in enumerate(self.history):
