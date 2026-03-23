@@ -77,7 +77,7 @@ def handle_edge_transitions(cars, edges, nodes):
             remaining_cars.append(car)
     return remaining_cars
 
-def generate_entry_demand(entry_nodes, edges, node_count, probability=0.05):
+def generate_entry_demand(entry_nodes, edges, node_types, probability=0.05):
     """
     Adds cars to node queues and assigns them a starting edge and destination.
     """
@@ -88,7 +88,12 @@ def generate_entry_demand(entry_nodes, edges, node_count, probability=0.05):
             if outgoing:
                 start_edge = random.choice(outgoing)
                 # Pick a random destination node index
-                dest = random.choice([i for i in range(node_count) if i != node.node_id])
+                exit_nodes = [i for i, t in node_types.items() if t.__class__.__name__ == "ExitNode"]
+
+                if not exit_nodes:
+                  continue  # no exits available
+
+                dest = random.choice(exit_nodes)
                 
                 new_car = Car(start_edge, random.uniform(2, 5), random.uniform(0.5, 1.5), dest)
                 node.waiting_queue.append(new_car)

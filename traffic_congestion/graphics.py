@@ -559,7 +559,7 @@ def main():
             eti.apply_traffic_lights(cars, entry_nodes, nodes)
             node_indices = list(range(len(nodes))) 
             """changed"""
-            eti.generate_entry_demand(entry_nodes, edges, len(nodes), probability=0.02)
+            eti.generate_entry_demand(entry_nodes, edges, node_types, probability=0.02)
 
             # B. Move cars from Node Queues onto the actual Edges
             eti.process_node_entries(entry_nodes, cars)
