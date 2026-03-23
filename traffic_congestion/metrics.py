@@ -1,4 +1,24 @@
 import csv
+import math
+
+
+def entry_density(edge_cars, window):
+    """Cars per unit length within the first `window` metres of an edge."""
+    count = sum(1 for c in edge_cars if c.x <= window)
+    return count / window
+
+def local_density(cars, position, bandwidth=20.0):
+    """
+    Estimate car density (cars per unit length) at a given position on an edge
+    using a Gaussian kernel. bandwidth controls the smoothing window.
+    """
+    if not cars:
+        return 0.0
+    total = sum(
+        math.exp(-0.5 * ((car.x - position) / bandwidth) ** 2)
+        for car in cars
+    )
+    return total / (bandwidth * math.sqrt(2 * math.pi))
 
 class TrafficMetrics:
     def __init__(self, road_length, v_max):

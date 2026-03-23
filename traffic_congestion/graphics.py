@@ -1,16 +1,16 @@
 import numpy as np
 from scipy import integrate, optimize
-import random
 
 from pyray import *
 import pickle
 
-from dataclasses import dataclass,field
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import List
 
 import traffic_simulation as tsim
-import entexi as eti
+from metrics import local_density
+from node import EntryNode, ExitNode, DragState, NODE_RADIUS, find_node_at, update_node_mode, rebuild_adjacency, compute_all_routes
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -183,22 +183,9 @@ def make_bezier_arc_length_solver(P0, P1, P2):
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
-class DragState(Enum):
-    IDLE     = auto()
-    DRAGGING = auto()
-
 class EditMode(Enum):
     EDITNODES = auto()
     EDITEDGES = auto()
-
-@dataclass
-class EntryNode():
-    spawn_probability: float = 0.05
-
-
-@dataclass
-class ExitNode():
-    despawn_probability: float = 0.05
 
 
 @dataclass
@@ -208,15 +195,6 @@ class Edge:
     cars: List[tsim.Car] = field(default_factory=list)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-def find_node_at(nodes, pos, radius=NODE_RADIUS):
-    """Return the index of the topmost node under *pos*, or None."""
-    for i in range(len(nodes) - 1, -1, -1):
-        node = nodes[i]
-        if check_collision_point_circle(pos, Vector2(float(node[0]), float(node[1])), radius):
-            return i
-    return None
-
 
 def mouse_in_ui(mouse_pos):
     """True when the cursor is inside the top UI strip (graph area only)."""
@@ -228,62 +206,6 @@ def mouse_in_panel(mouse_pos):
     return mouse_pos.x >= GRAPH_W
 
 # ── Mode updates ──────────────────────────────────────────────────────────────
-
-def update_node_mode(drag_state, drag_idx, nodes, edges, node_types, mouse_pos,
-                     node_hit, selected_node):
-    """
-    Left-click empty space  → add node
-    Left-drag a node        → move node (also selects it)
-    Right-click a node      → delete node + its edges
-    Edges and their handles are visible but not interactive.
-
-    Returns (drag_state, drag_idx, selected_node).
-    """
-    mp       = np.array([mouse_pos.x, mouse_pos.y])
-    pressed  = is_mouse_button_pressed( MouseButton.MOUSE_BUTTON_LEFT)
-    released = is_mouse_button_released(MouseButton.MOUSE_BUTTON_LEFT)
-    rclick   = is_mouse_button_pressed( MouseButton.MOUSE_BUTTON_RIGHT)
-
-    # Right-click → delete node and all edges that reference it
-    if rclick and node_hit is not None:
-        idx = node_hit
-        edges[:] = [e for e in edges
-                    if e.bezier.node0 != idx and e.bezier.node1 != idx]
-        for e in edges:
-            if e.bezier.node0 > idx: e.bezier.node0 -= 1
-            if e.bezier.node1 > idx: e.bezier.node1 -= 1
-        nodes.pop(idx)
-        # Rebuild node_types with shifted indices
-        new_types = {}
-        for k, v in node_types.items():
-            if k == idx:
-                continue
-            new_types[k - 1 if k > idx else k] = v
-        node_types.clear()
-        node_types.update(new_types)
-        if selected_node == idx:
-            selected_node = None
-        elif selected_node is not None and selected_node > idx:
-            selected_node -= 1
-        return DragState.IDLE, None, selected_node
-
-    match drag_state:
-        case DragState.IDLE:
-            if pressed:
-                if node_hit is not None:
-                    selected_node = node_hit
-                    return DragState.DRAGGING, node_hit, selected_node
-                else:
-                    nodes.append(mp.copy())
-
-        case DragState.DRAGGING:
-            # Move the node continuously while dragging
-            nodes[drag_idx] = mp.copy()
-            if released:
-                return DragState.IDLE, None, selected_node
-
-    return drag_state, drag_idx, selected_node
-
 
 def update_edge_mode(drag_state, drag_idx, nodes, edges, mouse_pos, node_hit):
     """
@@ -333,6 +255,22 @@ def update_edge_mode(drag_state, drag_idx, nodes, edges, mouse_pos, node_hit):
 
 # ── UI drawing ────────────────────────────────────────────────────────────────
 
+def _density_color(density, low=0.02, high=0.15):
+    """
+    Map a local density value to a colour:
+      below low  → green  (free flow)
+      at high    → red    (congested)
+      between    → yellow interpolated
+    """
+    t = max(0.0, min(1.0, (density - low) / (high - low)))
+    if t < 0.5:
+        s = t * 2                       # 0-1 over green→yellow
+        return Color(int(255 * s), 255, 0, 255)
+    else:
+        s = (t - 0.5) * 2              # 0-1 over yellow→red
+        return Color(255, int(255 * (1 - s)), 0, 255)
+
+
 def draw_button(rect, label, active):
     bg    = Color(30,  90, 200, 255) if active else Color(200, 200, 200, 255)
     fg    = WHITE                    if active else BLACK
@@ -347,48 +285,64 @@ def draw_button(rect, label, active):
     draw_text(label, tx, ty, font_size, fg)
 
 
-def draw_ui(edit_mode, mouse_pos):
-    """
-    Draw the top toolbar and return the new EditMode if a button was clicked,
-    otherwise return the current mode unchanged.
-    """
-    # Background strip (graph area only)
+def draw_ui(edit_mode, playing):
+    """Draw the top toolbar (no input handling)."""
     draw_rectangle(0, 0, GRAPH_W, UI_HEIGHT, Color(240, 240, 245, 255))
     draw_line(0, UI_HEIGHT - 1, GRAPH_W, UI_HEIGHT - 1, Color(180, 180, 190, 255))
 
     btn_w, btn_h = 130, 34
+    pp_w         = 90
     pad          = 10
     btn_y        = (UI_HEIGHT - btn_h) // 2
 
-    btn_nodes = Rectangle(pad,           btn_y, btn_w, btn_h)
-    btn_edges = Rectangle(pad + btn_w + 8, btn_y, btn_w, btn_h)
+    btn_nodes = Rectangle(pad,                 btn_y, btn_w, btn_h)
+    btn_edges = Rectangle(pad + btn_w + 8,     btn_y, btn_w, btn_h)
+    btn_pp    = Rectangle(pad + (btn_w + 8)*2, btn_y, pp_w,  btn_h)
 
     draw_button(btn_nodes, "Edit Nodes", edit_mode == EditMode.EDITNODES)
     draw_button(btn_edges, "Edit Edges", edit_mode == EditMode.EDITEDGES)
+    draw_button(btn_pp,    "Pause" if playing else "Play", playing)
 
-    # Hint text
     if edit_mode == EditMode.EDITNODES:
         hint = "Click: add node   |   Drag: move node   |   Right-click: delete node"
     else:
         hint = "Drag: add edge   |   Drag handle: reshape   |   Right-click handle: delete edge"
 
-    draw_text(hint, pad + btn_w * 2 + 24, btn_y + 8, 14, Color(80, 80, 100, 255))
+    hint_x = pad + (btn_w + 8) * 2 + pp_w + 12
+    draw_text(hint, hint_x, btn_y + 8, 14, Color(80, 80, 100, 255))
+    draw_text("S: save   L: load   Space: play/pause", GRAPH_W - 270, UI_HEIGHT - 18, 13,
+              Color(140, 140, 160, 255))
 
-    # Save / load hint (bottom-right of graph area)
-    draw_text("S: save   L: load", GRAPH_W - 130, UI_HEIGHT - 18, 13, Color(140, 140, 160, 255))
 
-    # Handle clicks only when released (avoids double-firing)
-    new_mode = edit_mode
+def handle_ui_input(edit_mode, playing, mouse_pos):
+    """Process toolbar clicks and space bar. Returns (new_edit_mode, new_playing)."""
+    btn_w, btn_h = 130, 34
+    pp_w         = 90
+    pad          = 10
+    btn_y        = (UI_HEIGHT - btn_h) // 2
+
+    btn_nodes = Rectangle(pad,                 btn_y, btn_w, btn_h)
+    btn_edges = Rectangle(pad + btn_w + 8,     btn_y, btn_w, btn_h)
+    btn_pp    = Rectangle(pad + (btn_w + 8)*2, btn_y, pp_w,  btn_h)
+
+    new_mode    = edit_mode
+    new_playing = playing
+
     if is_mouse_button_pressed(MouseButton.MOUSE_BUTTON_LEFT):
         if check_collision_point_rec(mouse_pos, btn_nodes):
             new_mode = EditMode.EDITNODES
         elif check_collision_point_rec(mouse_pos, btn_edges):
             new_mode = EditMode.EDITEDGES
+        elif check_collision_point_rec(mouse_pos, btn_pp):
+            new_playing = not playing
 
-    return new_mode
+    if is_key_pressed(KeyboardKey.KEY_SPACE):
+        new_playing = not new_playing
+
+    return new_mode, new_playing
 
 
-def _draw_float_editor(obj, attr, panel_x, y, mouse_pos):
+def _draw_float_editor(obj, attr, panel_x, y, mouse_pos, min_val=0.0, max_val=1.0, step=0.01):
     """Draw a  -  [value]  +  row for a float attribute on obj. Mutates obj."""
     val = getattr(obj, attr)
 
@@ -416,9 +370,9 @@ def _draw_float_editor(obj, attr, panel_x, y, mouse_pos):
 
     if is_mouse_button_pressed(MouseButton.MOUSE_BUTTON_LEFT):
         if check_collision_point_rec(mouse_pos, minus_rect):
-            setattr(obj, attr, round(max(0.0, val - 0.01), 4))
+            setattr(obj, attr, round(max(min_val, val - step), 4))
         elif check_collision_point_rec(mouse_pos, plus_rect):
-            setattr(obj, attr, round(min(1.0, val + 0.01), 4))
+            setattr(obj, attr, round(min(max_val, val + step), 4))
 
 
 def draw_node_panel(selected_node, node_types, mouse_pos):
@@ -500,6 +454,10 @@ def draw_node_panel(selected_node, node_types, mouse_pos):
         draw_text("despawn probability", px + 14, y, 12, Color(80, 80, 100, 255))
         y += 16
         _draw_float_editor(node_type, "despawn_probability", px, y, mouse_pos)
+        y += 36
+        draw_text("demand", px + 14, y, 12, Color(80, 80, 100, 255))
+        y += 16
+        _draw_float_editor(node_type, "demand", px, y, mouse_pos, min_val=0.0, max_val=10.0, step=0.1)
 
     return node_types
 
@@ -515,10 +473,14 @@ def main():
     nodes                  = []
     edges : List[Edge]     = []
     node_types             = {}   # {node_idx: EntryNode | ExitNode}  absent = plain node
+    incoming               = {}   # {node_idx: [Edge, ...]}
+    outgoing               = {}   # {node_idx: [Edge, ...]}
+    routes                 = {}   # {src: {dst: {'path', 'length', 'layer'}}}
     drag_state             = DragState.IDLE
     drag_idx               = None
     edit_mode              = EditMode.EDITNODES
     selected_node          = None
+    playing                = False
 
 
     while not window_should_close():
@@ -532,9 +494,10 @@ def main():
         node_hit  = None if (in_ui or in_panel) else find_node_at(nodes, mouse_pos)
 
         # ── UI (mode buttons) ──────────────────────────────────────────────
-        edit_mode = draw_ui(edit_mode, mouse_pos)   # also draws the strip
+        edit_mode, playing = handle_ui_input(edit_mode, playing, mouse_pos)
 
         # ── Graph logic (blocked while cursor is in UI strip or panel) ─────
+        prev_counts = (len(nodes), len(edges))
         if not in_ui and not in_panel:
             if edit_mode == EditMode.EDITNODES:
                 drag_state, drag_idx, selected_node = update_node_mode(
@@ -544,30 +507,20 @@ def main():
                 drag_state, drag_idx = update_edge_mode(
                     drag_state, drag_idx, nodes, edges, mouse_pos, node_hit)
 
-        # Car logic
-        for _ in range(10):
-            for edge in edges:
-                #Temporary (get rid of cars at end)
-                tmp = []
-                for car in edge.cars:
-                    if not abs(edge.bezier.total_length(nodes)-car.x) < 1:
-                        tmp += [car]
+        if (len(nodes), len(edges)) != prev_counts:
+            incoming, outgoing = rebuild_adjacency(nodes, edges)
+            routes = compute_all_routes(nodes, outgoing)
 
-                edge.cars = tmp
-
-                # Spawn in a new car if only 1 car is present
-                if len(edge.cars) < 20:
-                    edge.cars += [tsim.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None) for i in range(20-len(edge.cars))]
-
-                tsim.update_velocities(edge.cars)
-                tsim.update_positions(edge.cars)
+        # Car logic (only when playing)
+        if playing:
+            tsim.tick(node_types, routes, edges, nodes)
 
         # ── Drawing ────────────────────────────────────────────────────────
         begin_drawing()
         clear_background(WHITE)
 
         # Re-draw UI on top (begin_drawing clears)
-        edit_mode = draw_ui(edit_mode, mouse_pos)
+        draw_ui(edit_mode, playing)
 
         # Edges
         for edge in edges:
@@ -621,6 +574,8 @@ def main():
             nodes = data["nodes"]
             edges = data["edges"]
             node_types = data.get("node_types", {})
+            incoming, outgoing = rebuild_adjacency(nodes, edges)
+            routes = compute_all_routes(nodes, outgoing)
             drag_state = DragState.IDLE
             drag_idx   = None
             selected_node = None
@@ -628,10 +583,12 @@ def main():
 
         # ── Car Drawing ────────────────────────────────────────────────────
         for edge in edges:
+            road_length = edge.bezier.total_length(nodes)
             for car in edge.cars:
-                t = edge.bezier.r_proportional(car.x/edge.bezier.total_length(nodes), nodes)
+                t   = edge.bezier.r_proportional(car.x / road_length, nodes)
                 pos = edge.bezier.point_at(t, nodes)
-                draw_circle(int(pos[0]), int(pos[1]), 4, Color(180, 180, 255, 255))
+                col = _density_color(local_density(edge.cars, car.x))
+                draw_circle(int(pos[0]), int(pos[1]), 4, col)
 
         end_drawing()
 

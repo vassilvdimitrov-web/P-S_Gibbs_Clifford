@@ -1,38 +1,5 @@
 import random
 
-
-#suggestions
-class EntryNode:
-    def __init__(self, linear_pos, node_id):
-        self.linear_pos = linear_pos
-        self.node_id = node_id
-        self.waiting_queue = []
-
-        # Traffic light states
-        self.entry_green = False
-        self.main_green = True
-
-        self.timer = 0
-        self.phase_duration = random.randint(150, 300)
-
-class Car:
-    def __init__(self, position, velocity, reaction_speed, exit_pos, length=4.5):
-        self.x = position
-        self.v = velocity
-        self.reac = reaction_speed
-        self.exit = exit_pos  
-        self.l = length
-        
-        self.is_waiting_to_enter = False
-
-def update_velocities_with_exits(cars, road_length):
-    """Behavioral logic: slow down cars as they approach their exit."""
-    for car in cars:
-        dist_to_exit = (car.exit - car.x) % road_length
-        if dist_to_exit < 100: 
-            # Smoothly reduce speed to an "exit speed" (e.g., 10)
-            car.v = max(10, car.v - (2 * car.reac))
-
 def can_safely_enter(entry_pos, active_cars, road_length, safe_distance=15):
     """Math logic: Check both behind (Lag) and ahead (Lead) before merging."""
     lag_car = None
