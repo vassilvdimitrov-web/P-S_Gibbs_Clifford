@@ -89,13 +89,18 @@ def generate_entry_demand(entry_nodes, edges, node_types, probability=0.05):
             if outgoing:
                 start_edge = random.choice(outgoing)
                 # Pick a random destination node index
-                exit_nodes = [i for i, t in node_types.items() if t.__class__.__name__ == "ExitNode"]
+                exit_nodes = []
+                weights = []
+
+                for i, t in node_types.items():
+                    if t.__class__.__name__ == "ExitNode":
+                        exit_nodes.append(i)
+                        weights.append(max(0.0001, t.demand))  # avoid zero weight
 
                 if not exit_nodes:
-                  continue  # no exits available
+                    continue
 
-                dest = random.choice(exit_nodes)
-                
+                dest = random.choices(exit_nodes, weights=weights, k=1)[0]
                 #new_car = Car(start_edge, random.uniform(2, 5), random.uniform(0.5, 1.5), dest)
                 is_bad = random.random() < 0.10   # 15% bad drivers
                 new_car = Car(

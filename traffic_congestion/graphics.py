@@ -199,7 +199,7 @@ class EntryNode():
 @dataclass
 class ExitNode():
     despawn_probability: float = 0.05
-
+    demand: float = 1.0 
 
 @dataclass
 class Edge:
@@ -504,8 +504,11 @@ def draw_node_panel(selected_node, node_types, mouse_pos):
         draw_text("despawn probability", px + 14, y, 12, Color(80, 80, 100, 255))
         y += 16
         _draw_float_editor(node_type, "despawn_probability", px, y, mouse_pos)
-
-    return node_types
+        y += 40
+        draw_text("demand", px + 14, y, 12, Color(80, 80, 100, 255))
+        y += 16
+        _draw_float_editor(node_type, "demand", px, y, mouse_pos)
+        return node_types
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
