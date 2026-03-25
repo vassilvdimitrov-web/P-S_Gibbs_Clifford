@@ -82,12 +82,17 @@ def handle_edge_transitions(cars, edges, nodes, node_types):
                 if node_type is not None and node_type.__class__.__name__ == "ExitNode":
                     if random.random() < node_type.despawn_probability:
                         continue  # car leaves the system
-                # if it did not despawn, it continues through the network
+                    else:
+                        # car stays waiting at the exit node
+                        car.x = edge_len
+                        car.v = 0.0
+                        remaining_cars.append(car)
+                        continue
             """
             # 3. Find next options looking at .bezier.node0 and .bezier.node1
             next_options = [e for e in edges if e.bezier.node0 == car.current_edge.bezier.node1]
             """
-            next_options = [e for e in edges if e.bezier.node0 ==end_node]
+            next_options = [e for e in edges if e.bezier.node0 ==end_node] #normal transition for non-destination node
 
             if next_options:
                 car.current_edge = random.choice(next_options)

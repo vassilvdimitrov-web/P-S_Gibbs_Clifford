@@ -198,7 +198,7 @@ class EntryNode():
 
 @dataclass
 class ExitNode():
-    despawn_probability: float = 1.0
+    despawn_probability: float = 0.2
     demand: float = 1.0 
 
 @dataclass

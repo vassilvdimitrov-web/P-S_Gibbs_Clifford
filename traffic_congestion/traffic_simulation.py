@@ -1,7 +1,7 @@
 import random
 
 v_max = 50.0
-safe_distance = 10
+#safe_distance = 10
 dt = 0.01                                    # how much time passes between updates, time step
 
 bad_driver_safe_distance_factor = 1.5
@@ -10,6 +10,14 @@ bad_driver_safe_brake_factor = 1.5
 
 default_acceleration = 3.0
 default_brake_factor = 5.0
+
+def desired_safe_distance(speed):
+    if speed < 10:
+        return 3.0
+    elif speed < 25:
+        return 8.0
+    else:
+        return 10.0
 
 def local_speed_limit(x,edge=None):
     if edge is not None and hasattr(edge, "speed_limit"):
@@ -55,12 +63,13 @@ def update_velocities_on_edge(edge, cars, nodes):
     edge_cars.sort(key=lambda c: c.x)
 
     for car in edge_cars:
+        base_safe_dist = desired_safe_distance(car.v)
         if getattr(car, "is_bad_driver", False):
-            safe_dist = safe_distance * bad_driver_safe_distance_factor
+            safe_dist = base_safe_dist * bad_driver_safe_distance_factor
             accel = default_acceleration * bad_driver_acceleartion_factor
             brake = default_brake_factor * bad_driver_safe_brake_factor
         else:
-            safe_dist = safe_distance
+            safe_dist = base_safe_dist
             accel = default_acceleration
             brake = default_brake_factor
 
