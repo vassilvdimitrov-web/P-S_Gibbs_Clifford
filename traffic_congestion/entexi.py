@@ -35,38 +35,60 @@ def can_safely_enter(target_edge, active_cars, safe_distance=0.5):
                 return False
     return True
 
-def process_node_entries(entry_nodes, active_cars):
+def process_node_entries(entry_nodes, active_cars, traffic_lights_enabled=True):
     """
     Moves cars from queue to road ONLY if the entry light is green
     AND there is enough space to merge safely.
     """
     for node in entry_nodes:
+        allow_entry = False
         # Step 1: Is someone waiting AND is the light green?
-        if len(node.waiting_queue) > 0 and node.entry_green: 
+        if len(node.waiting_queue) > 0:
+            if traffic_lights_enabled:
+                allow_entry = node.entry_green
+            else:
+                allow_entry = True
+
+        if allow_entry:
             next_car = node.waiting_queue[0]
             
             # Step 2: Is there a gap in the ring road traffic?
-            if can_safely_enter(next_car.current_edge, active_cars, safe_distance=25.0):
+            if can_safely_enter(next_car.current_edge, active_cars, safe_distance=10.0):
                 entering_car = node.waiting_queue.pop(0)
                 entering_car.is_waiting_to_enter = False
                 entering_car.x = 0.0
                 active_cars.append(entering_car)
 
                 
-def handle_edge_transitions(cars, edges, nodes):
+#def handle_edge_transitions(cars, edges, nodes):
+def handle_edge_transitions(cars, edges, nodes, node_types):
     remaining_cars = []
     for car in cars:
         # 1. Use the bezier attribute to get length
         edge_len = car.current_edge.bezier.total_length(nodes)
         
         if car.x >= edge_len:
+            """
             # 2. Check destination using .bezier.node1
             if car.current_edge.bezier.node1 == car.destination_node_idx:
                 continue # Car successfully exited the system
-            
+            """
+            end_node = car.current_edge.bezier.node1
+            # Car has reached its chosen exit node
+            if end_node == car.destination_node_idx:
+                node_type = node_types.get(end_node)
+
+                # only Exit nodes can actually remove cars, using despawn_probability
+                if node_type is not None and node_type.__class__.__name__ == "ExitNode":
+                    if random.random() < node_type.despawn_probability:
+                        continue  # car leaves the system
+                # if it did not despawn, it continues through the network
+            """
             # 3. Find next options looking at .bezier.node0 and .bezier.node1
             next_options = [e for e in edges if e.bezier.node0 == car.current_edge.bezier.node1]
-            
+            """
+            next_options = [e for e in edges if e.bezier.node0 ==end_node]
+
             if next_options:
                 car.current_edge = random.choice(next_options)
                 car.x = 0
@@ -78,39 +100,46 @@ def handle_edge_transitions(cars, edges, nodes):
             remaining_cars.append(car)
     return remaining_cars
 
-def generate_entry_demand(entry_nodes, edges, node_types, probability=0.05):
+#def generate_entry_demand(entry_nodes, edges, node_types, probability=0.05):
+def generate_entry_demand(entry_nodes, edges, node_types):
     """
     Adds cars to node queues and assigns them a starting edge and destination.
     """
     for node in entry_nodes:
-        if random.random() < probability:
+        node_type = node_types.get(node.node_id)
+        if node_type is None or node_type.__class__.__name__ != "EntryNode":
+            continue
+
+        if random.random() < node_type.spawn_probability:
+        #if random.random() < probability:
             # Find edges starting at this node
             outgoing = [e for e in edges if e.bezier.node0 == node.node_id]
-            if outgoing:
-                start_edge = random.choice(outgoing)
-                # Pick a random destination node index
-                exit_nodes = []
-                weights = []
+            if not outgoing:
+                continue
+            start_edge = random.choice(outgoing)
+            # Pick a random destination node index
+            exit_nodes = []
+            weights = []
 
-                for i, t in node_types.items():
-                    if t.__class__.__name__ == "ExitNode":
-                        exit_nodes.append(i)
-                        weights.append(max(0.0001, t.demand))  # avoid zero weight
+            for i, t in node_types.items():
+                if t.__class__.__name__ == "ExitNode":
+                    exit_nodes.append(i)
+                    weights.append(max(0.0001, t.demand))  # avoid zero weight
 
-                if not exit_nodes:
-                    continue
+            if not exit_nodes:
+                continue
 
-                dest = random.choices(exit_nodes, weights=weights, k=1)[0]
-                #new_car = Car(start_edge, random.uniform(2, 5), random.uniform(0.5, 1.5), dest)
-                is_bad = random.random() < 0.10   # 15% bad drivers
-                new_car = Car(
-                    start_edge,
-                    random.uniform(2, 5),
-                    random.uniform(0.5, 1.5),
-                    dest,
-                    is_bad_driver=is_bad
-                )
-                node.waiting_queue.append(new_car)
+            dest = random.choices(exit_nodes, weights=weights, k=1)[0]
+            #new_car = Car(start_edge, random.uniform(2, 5), random.uniform(0.5, 1.5), dest)
+            is_bad = random.random() < 0.10   # 15% bad drivers
+            new_car = Car(
+                start_edge,
+                random.uniform(2, 5),
+                random.uniform(0.5, 1.5),
+                dest,
+                is_bad_driver=is_bad
+            )
+            node.waiting_queue.append(new_car)
 
 def update_traffic_lights(entry_nodes):
     for node in entry_nodes:

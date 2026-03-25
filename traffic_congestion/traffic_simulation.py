@@ -1,8 +1,6 @@
 import random
 
-
 v_max = 50.0
-
 safe_distance = 10
 dt = 0.01                                    # how much time passes between updates, time step
 
@@ -12,20 +10,6 @@ bad_driver_safe_brake_factor = 1.5
 
 default_acceleration = 3.0
 default_brake_factor = 5.0
-
-
-"""
-class Car:
-    def __init__(self, current_edge, velocity, reaction_speed, length, destination_node_idx, is_bad_driver=False):
-        self.current_edge = current_edge
-        self.x = 0.0       
-        self.v = velocity
-        self.reac = reaction_speed
-        self.l = length
-        self.destination_node_idx = destination_node_idx
-        self.is_bad_driver = is_bad_driver
-        self.is_waiting_to_enter = True
-"""
 
 def local_speed_limit(x,edge=None):
     if edge is not None and hasattr(edge, "speed_limit"):

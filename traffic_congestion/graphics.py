@@ -198,7 +198,7 @@ class EntryNode():
 
 @dataclass
 class ExitNode():
-    despawn_probability: float = 0.05
+    despawn_probability: float = 1.0
     demand: float = 1.0 
 
 @dataclass
@@ -232,7 +232,7 @@ def mouse_in_panel(mouse_pos):
 # ── Mode updates ──────────────────────────────────────────────────────────────
 
 def update_node_mode(drag_state, drag_idx, nodes, edges, node_types, mouse_pos,
-                     node_hit, selected_node):
+                     node_hit, selected_node, cars):
     """
     Left-click empty space  → add node
     Left-drag a node        → move node (also selects it)
@@ -249,8 +249,17 @@ def update_node_mode(drag_state, drag_idx, nodes, edges, node_types, mouse_pos,
     # Right-click → delete node and all edges that reference it
     if rclick and node_hit is not None:
         idx = node_hit
-        edges[:] = [e for e in edges
-                    if e.bezier.node0 != idx and e.bezier.node1 != idx]
+        #edges[:] = [e for e in edges
+                    #if e.bezier.node0 != idx and e.bezier.node1 != idx]
+        
+        # find edges that will be deleted
+        deleted_edges = [e for e in edges if e.bezier.node0 == idx or e.bezier.node1 == idx]
+        # remove those edges
+        edges[:] = [e for e in edges if e not in deleted_edges]
+        #remove cars on those edges
+        cars[:] = [car for car in cars if car.current_edge not in deleted_edges]
+
+
         for e in edges:
             if e.bezier.node0 > idx: e.bezier.node0 -= 1
             if e.bezier.node1 > idx: e.bezier.node1 -= 1
@@ -350,6 +359,56 @@ def draw_button(rect, label, active):
     ty = int(rect.y + (rect.height - font_size) / 2)
     draw_text(label, tx, ty, font_size, fg)
 
+def draw_simulation_button(simulation_running, mouse_pos):
+    """
+    Draw Start/Pause button at the bottom of the right-side panel.
+    Returns updated simulation_running state.
+    """
+    btn_w, btn_h = 120, 36
+    margin = 14
+
+    px = GRAPH_W   # panel starts here
+
+    rect = Rectangle(
+        px + (PANEL_W - btn_w) / 2,
+        WINDOW_H - btn_h - margin,
+        btn_w,
+        btn_h
+    )
+
+    label = "Pause" if simulation_running else "Start"
+    draw_button(rect, label, simulation_running)
+
+    if is_mouse_button_pressed(MouseButton.MOUSE_BUTTON_LEFT):
+        if check_collision_point_rec(mouse_pos, rect):
+            simulation_running = not simulation_running
+
+    return simulation_running
+
+def draw_traffic_lights_button(traffic_lights_enabled, mouse_pos):
+    """
+    Draw Traffic Lights On/Off button in the right-side panel.
+    Returns updated traffic_lights_enabled state.
+    """
+    btn_w, btn_h = 160, 36
+    margin = 14
+    px = GRAPH_W
+
+    rect = Rectangle(
+        px + (PANEL_W - btn_w) / 2,
+        WINDOW_H - btn_h - 60,   # above the Start/Pause button
+        btn_w,
+        btn_h
+    )
+
+    label = "Lights: ON" if traffic_lights_enabled else "Lights: OFF"
+    draw_button(rect, label, traffic_lights_enabled)
+
+    if is_mouse_button_pressed(MouseButton.MOUSE_BUTTON_LEFT):
+        if check_collision_point_rec(mouse_pos, rect):
+            traffic_lights_enabled = not traffic_lights_enabled
+
+    return traffic_lights_enabled
 
 def draw_ui(edit_mode, mouse_pos):
     """
@@ -514,7 +573,6 @@ def draw_node_panel(selected_node, node_types, mouse_pos):
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 
-
 def main():
     init_window(WINDOW_W, WINDOW_H, "")
     set_target_fps(60)
@@ -524,9 +582,6 @@ def main():
     drag_state = DragState.IDLE
     drag_idx   = None
     edit_mode  = EditMode.EDITNODES
-    
-    #cars = [eti.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None), 
-    #        eti.Car(200, random.uniform(5, tsim.v_max), 5, 0.2, None)]
     selected_node = None 
     node_types = {} 
     
@@ -535,6 +590,8 @@ def main():
     cars = []        # Active cars driving on edges
 
     metrics = TrafficMetrics(road_length=1.0, v_max=tsim.v_max)
+    simulation_running = False
+    traffic_lights_enabled = False
 
     while not window_should_close():
         # ── Input ──────────────────────────────────────────────────────────
@@ -548,17 +605,16 @@ def main():
 
         # ── UI (mode buttons) ──────────────────────────────────────────────
         edit_mode = draw_ui(edit_mode, mouse_pos)   # also draws the strip
-
+        
         # ── Graph logic (blocked while cursor is in UI strip or panel) ─────
         if not in_ui and not in_panel:
             if edit_mode == EditMode.EDITNODES:
                 drag_state, drag_idx, selected_node = update_node_mode(
                     drag_state, drag_idx, nodes, edges, node_types,
-                    mouse_pos, node_hit, selected_node)
+                    mouse_pos, node_hit, selected_node, cars)
             else:
                 drag_state, drag_idx = update_edge_mode(
                     drag_state, drag_idx, nodes, edges, mouse_pos, node_hit)
-
 
 
         #only nodes marked as Entry generate cars and have queue/light logic.
@@ -574,73 +630,40 @@ def main():
         for node_id in entry_ids:
             if node_id not in existing_ids:
                 entry_nodes.append(eti.EntryNode(node_id))
+        if simulation_running:
+            if nodes and edges:
+                eti.generate_entry_demand(entry_nodes, edges, node_types)
+            for _ in range(4): 
+                # Car logic
+                if nodes and edges:
+                    if traffic_lights_enabled:
+                        # A. Update Traffic Systems (Lights and Spawning into Queues)
+                        eti.update_traffic_lights(entry_nodes)
+                        eti.apply_traffic_lights(cars, entry_nodes, nodes)
+                    #node_indices = list(range(len(nodes))) 
+                    """changed"""
+                    #eti.generate_entry_demand(entry_nodes, edges, node_types, probability=0.05)
+                    #eti.generate_entry_demand(entry_nodes, edges, node_types)
+                    # B. Move cars from Node Queues onto the actual Edges
+                    eti.process_node_entries(entry_nodes, cars, traffic_lights_enabled)
 
+                # C. Physics Update
+                tsim.update_velocities(cars, nodes, edges)
+                tsim.update_positions(cars, nodes, edges)
+                '''added nodes in this argument'''
+                # D. Transitions (Handover from one edge to the next OR exiting)
+                cars = eti.handle_edge_transitions(cars, edges, nodes, node_types)
+                '''here I added another thing'''
+                # This ensures if you clicked to add a node above,an entry_node is created for it immediately.
+            
+            # Metrics update
+            total_road_length = 0.0
+            for edge in edges:
+                total_road_length += edge.bezier.total_length(nodes)        #total length should be the sum of all edge lengths
 
+            metrics.road_length = total_road_length if total_road_length > 0 else 1.0
+            metrics.compute(cars, entry_nodes)
 
-        # Car logic
-        '''my car logic'''
-        if nodes and edges:
-        # A. Update Traffic Systems (Lights and Spawning into Queues)
-            eti.update_traffic_lights(entry_nodes)
-            eti.apply_traffic_lights(cars, entry_nodes, nodes)
-            #node_indices = list(range(len(nodes))) 
-            """changed"""
-            eti.generate_entry_demand(entry_nodes, edges, node_types, probability=0.02)
-
-            # B. Move cars from Node Queues onto the actual Edges
-            eti.process_node_entries(entry_nodes, cars)
-
-        # C. Physics Update
-        tsim.update_velocities(cars, nodes, edges)
-        tsim.update_positions(cars, nodes, edges)
-        '''added nodes in this argument'''
-        # D. Transitions (Handover from one edge to the next OR exiting)
-        cars = eti.handle_edge_transitions(cars, edges, nodes)
-        '''here I added another thing'''
-        # This ensures if you clicked to add a node above,an entry_node is created for it immediately.
-        
-
-
-        # Metrics update
-        total_road_length = 0.0
-        for edge in edges:
-            total_road_length += edge.bezier.total_length(nodes)        #total length should be the sum of all edge lengths
-
-        metrics.road_length = total_road_length if total_road_length > 0 else 1.0
-        metrics.compute(cars, entry_nodes)
-
-
-
-        #we don't want this because it forces ALL nodes to behave like Entry nodes and it ignores the UI completely
-        """
-        if len(entry_nodes) < len(nodes):
-            for i in range(len(entry_nodes), len(nodes)):
-                entry_nodes.append(eti.EntryNode(i))
-        elif len(entry_nodes) > len(nodes):
-            entry_nodes = entry_nodes[:len(nodes)]
-            for i, enode in enumerate(entry_nodes):
-                enode.node_id = i
-        """
-        
-
-        """ will comment out this"""
-        """ Temporary (get rid of cars at end)
-        tmp = []
-        for car in cars:
-            if not tsim.is_car_at_end_of_road(car):
-                tmp += [car]
-        
-        cars = tmp
-        """
-        # Spawn in a new car if only 1 car is present
-        ''''deleted this part
-if len(cars) == 1:
-    cars += [tsim.Car(0, random.uniform(5, tsim.v_max), 5, 0.2, None)]'''
-
-        """will comment out this part too"""
-        """  tsim.update_velocities(cars)
-        tsim.update_positions(cars)
-      """
         # ── Drawing ────────────────────────────────────────────────────────
         begin_drawing()
         clear_background(WHITE)
@@ -648,7 +671,7 @@ if len(cars) == 1:
         draw_text(f"Cars: {len(cars)}", 20, 80, 20, RED)
         # Re-draw UI on top (begin_drawing clears)
         edit_mode = draw_ui(edit_mode, mouse_pos)
-
+        
         # Edges
         for edge in edges:
             edge.bezier.draw(nodes)
@@ -690,6 +713,8 @@ if len(cars) == 1:
 
         # Right-side panel
         draw_node_panel(selected_node, node_types, mouse_pos)
+        traffic_lights_enabled = draw_traffic_lights_button(traffic_lights_enabled, mouse_pos)
+        simulation_running = draw_simulation_button(simulation_running, mouse_pos)
 
         # ── Save / Load ────────────────────────────────────────────────────
         if is_key_pressed(KeyboardKey.KEY_S):
@@ -729,7 +754,10 @@ if len(cars) == 1:
                 pos = nodes[node.node_id]
     
                 # 2. Determine the color based on the entry light state
-                light_color = GREEN if node.entry_green else RED
+                if traffic_lights_enabled:
+                    light_color = GREEN if node.entry_green else RED
+                else:
+                    light_color = DARKGRAY
                 
                 # 3. Now draw the light (using the 'pos' we just defined)
                 draw_circle(int(pos[0]) + 20, int(pos[1]), 5, light_color)
@@ -737,10 +765,9 @@ if len(cars) == 1:
                 # 4. Draw the queue count if anyone is waiting
                 if node.waiting_queue:
                     draw_text(str(len(node.waiting_queue)), int(pos[0]) - 5, int(pos[1]) - 25, 12, DARKGRAY)
-
         end_drawing()
     
-    metrics.compute(cars, entry_nodes)
+    #metrics.compute(cars, entry_nodes)
     metrics.save("traffic_data.npz")
     close_window()
 
