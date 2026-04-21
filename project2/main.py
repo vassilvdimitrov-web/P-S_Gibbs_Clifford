@@ -138,15 +138,13 @@ plot_multiple([traj1, traj2])
 # -------------------
 # PART (d): Three-body
 # -------------------
-pos = np.array([[1,0], [-1,0], [0,1]], dtype=float)
-vel = np.array([[0,0.5], [0,-0.5], [-0.5,0]], dtype=float)
-masses = np.array([1,1,1])
+# pos = np.array([[1,0], [-1,0], [0,1]], dtype=float)
+# vel = np.array([[0,0.5], [0,-0.5], [-0.5,0]], dtype=float)
+# masses = np.array([1,1,1])
 
-traj3 = simulate_three_body(pos, vel, masses)
-plot_multiple([traj3[:,0], traj3[:,1], traj3[:,2]])
+# traj3 = simulate_three_body(pos, vel, masses)
+# plot_multiple([traj3[:,0], traj3[:,1], traj3[:,2]])
 from visualization import animate_three_body
-
-# Choose ONE case at a time
 
 # --- Case 1: Equal masses (figure-8)
 masses = np.array([1, 1, 1])
@@ -166,3 +164,128 @@ vel = np.array([
 traj = simulate_three_body(pos, vel, masses, dt=0.1, steps=8000)
 
 animate_three_body(traj)
+
+# --- Case 1: Equal masses (figure-8)
+# Circular, periodic and stable orbit (very simple & predictable)
+masses = np.array([1, 1, 1])
+
+pos = np.array([
+    [0, 1],
+    [0, 0],
+    [0, -1]
+], dtype=float)
+
+vel = np.array([
+    [1.0, 0.0],
+    [0.0, 0.0],
+    [-1.0, 0.0]
+])
+
+masses = np.array([1, 1, 1])
+
+traj = simulate_three_body(pos, vel, masses, dt=0.01, steps=8000)
+
+animate_three_body(traj)
+
+# Less trivial periodic config
+masses = np.array([1, 1, 1])
+pos = np.array([
+    [1, 0],
+    [-0.5,0.8660],
+    [-0.5,-0.8660]
+], dtype=float)
+
+vel = np.array([
+    [0.0,1],
+    [-0.8660, -0.5],
+    [0.8660, -0.5]
+])
+
+vel = vel / np.sqrt(2)
+
+traj = simulate_three_body(pos, vel, masses, dt=0.01, steps=3000)
+
+animate_three_body(traj)
+
+# --- Case 2: Lagrange equilateral triangle with a very heavy body
+# Lagrange's solution is periodic for any mass ratio: the triangle rotates
+# rigidly and each body traces a circle about the common center of mass. With M >> m
+# the heavy body's circle is small (radius = 3m/(M+2m) for side sqrt(3)),
+# because momentum conservation forbids a large excursion of the heavy body.
+# We can see a periodic orbit the zoomed sub-plot.
+# masses = np.array([100.0, 1.0, 1.0])
+
+pos_centroid = np.array([
+    [1.0, 0.0],
+    [-0.5, np.sqrt(3)/2],
+    [-0.5, -np.sqrt(3)/2],
+])
+
+# Shift so the COM is at the origin
+com = (masses[:, None] * pos_centroid).sum(axis=0) / masses.sum()
+pos = pos_centroid - com
+
+# Exact circular velocity for the equilateral configuration
+a_side = np.sqrt(3)
+omega = np.sqrt(G * masses.sum() / a_side**3)
+vel = omega * np.column_stack((-pos[:, 1], pos[:, 0]))
+
+traj = simulate_three_body(pos, vel, masses, dt=0.002, steps=6000)
+
+# zoom_body=0 zooms on the heavy body so its small but exact circle is seen
+animate_three_body(traj, zoom_body=0)
+
+# --- Case 3: Hierarchical triple with m1 >> m2 >> m3 (three distinct orbits)
+# A Lagrange-like configuration forces all three bodies to share one triangle
+# and therefore one common length scale. To get THREE different orbital paths
+# we use a hierarchical / Kepler-of-Keplers setup:
+#   - m1 and m2 form a tight inner binary, circular about their own COM.
+#   - The inner binary's COM and m3 form an outer binary, circular about the
+#     full-system COM.
+# a_out is chosen so that the outer period is an exact integer multiple of the
+# inner period (here 8:1 mean-motion resonance), making the full three-body
+# motion periodic in the COM frame. Each body traces its own distinct path:
+# m1 a tiny wobble, m2 a medium circle, m3 a large outer circle.
+masses = np.array([1.0, 0.1, 0.001])   # m1 >> m2 >> m3
+m1, m2, m3 = masses
+M_in = m1 + m2
+M_tot = M_in + m3
+
+a_in = 1.0                              # inner binary separation
+# (omega_in / omega_out)^2 = (M_in/M_tot) * (a_out/a_in)^3 -> pick ratio = 8
+a_out = a_in * (64.0 * M_tot / M_in) ** (1.0/3.0)
+
+omega_in = np.sqrt(G * M_in / a_in**3)
+omega_out = np.sqrt(G * M_tot / a_out**3)
+
+# Inner-binary geometry (distances from inner-binary COM)
+r1_in = a_in * m2 / M_in   # m1's swing radius
+r2_in = a_in * m1 / M_in   # m2's swing radius
+
+# Outer-binary geometry (distances from full-system COM)
+d_in = a_out * m3 / M_tot      # inner-COM offset from full COM
+d_out = a_out * M_in / M_tot   # m3's distance from full COM (opposite side)
+
+# Inner binary on the -x side, m3 on the +x side
+inner_com = np.array([-d_in, 0.0])
+pos = np.array([
+    inner_com + np.array([-r1_in, 0.0]),  # m1
+    inner_com + np.array([ r2_in, 0.0]),  # m2
+    np.array([ d_out, 0.0]),              # m3
+])
+
+# Velocities: outer orbit is CCW -> m3 moves +y, inner-COM moves -y.
+# The inner binary also rotates CCW about its own COM.
+v_inner_com_y = -omega_out * d_in
+v_m3_y        =  omega_out * d_out
+vel = np.array([
+    [0.0, v_inner_com_y - omega_in * r1_in],  # m1
+    [0.0, v_inner_com_y + omega_in * r2_in],  # m2
+    [0.0, v_m3_y],                            # m3
+])
+
+traj = simulate_three_body(pos, vel, masses, dt=0.01, steps=15000)
+
+# Zoom on m1 so its tiny wobble is visible alongside the full system view.
+animate_three_body(traj, zoom_body=0)
+

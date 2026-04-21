@@ -55,24 +55,50 @@ def plot_multiple(trajectories, labels=None, title="Trajectories"):
 # -------------------
 # Animation (PART D)
 # -------------------
-def animate_three_body(traj):
-    fig, ax = plt.subplots()
-    ax.set_xlim(-3, 3)
-    ax.set_ylim(-3, 3)
-    ax.set_aspect('equal')
+def animate_three_body(traj, zoom_body=None, zoom_pad=0.2):
+    # Main view on the left, optional zoom on `zoom_body` on the right so a
+    # very-small orbit (e.g. a heavy mass in Lagrange's equilateral solution)
+    # stays visible even when the big picture is dominated by the light bodies.
+    if zoom_body is None:
+        fig, ax = plt.subplots()
+        axes = [ax]
+    else:
+        fig, axes = plt.subplots(1, 2, figsize=(12, 6))
 
-    lines = [ax.plot([], [], '-')[0] for _ in range(3)]
-    points = [ax.plot([], [], 'o')[0] for _ in range(3)]
+    span = np.max(np.abs(traj)) * 1.1
+    axes[0].set_xlim(-span, span)
+    axes[0].set_ylim(-span, span)
+    axes[0].set_aspect('equal')
+    axes[0].set_title("Full system")
+
+    if zoom_body is not None:
+        zb = traj[:, zoom_body, :]
+        cx, cy = zb.mean(axis=0)
+        r = np.max(np.linalg.norm(zb - [cx, cy], axis=1)) + zoom_pad
+        axes[1].set_xlim(cx - r, cx + r)
+        axes[1].set_ylim(cy - r, cy + r)
+        axes[1].set_aspect('equal')
+        axes[1].set_title(f"Zoom on body {zoom_body}")
+
+    lines_main = [axes[0].plot([], [], '-')[0] for _ in range(3)]
+    points_main = [axes[0].plot([], [], 'o')[0] for _ in range(3)]
+
+    if zoom_body is not None:
+        line_zoom, = axes[1].plot([], [], '-')
+        point_zoom, = axes[1].plot([], [], 'o')
 
     def update(frame):
         for i in range(3):
             x = traj[:frame, i, 0]
             y = traj[:frame, i, 1]
+            lines_main[i].set_data(x, y)
+            points_main[i].set_data(traj[frame, i, 0], traj[frame, i, 1])
 
-            lines[i].set_data(x, y)
-            points[i].set_data(traj[frame, i, 0], traj[frame, i, 1])
-
-        return lines + points
+        if zoom_body is not None:
+            line_zoom.set_data(traj[:frame, zoom_body, 0], traj[:frame, zoom_body, 1])
+            point_zoom.set_data(traj[frame, zoom_body, 0], traj[frame, zoom_body, 1])
+            return lines_main + points_main + [line_zoom, point_zoom]
+        return lines_main + points_main
 
     ani = FuncAnimation(fig, update, frames=len(traj), interval=20)
     plt.show()
@@ -180,7 +206,7 @@ def animate_hohmann_transfer(transfer_traj, r1, r2):
         y = transfer_traj[:frame, 1]
 
         line.set_data(x, y)
-        point.set_data([transfer_traj[frame, 0]], [transfer_traj[frame, 1]])
+        point.set_data(transfer_traj[frame, 0], transfer_traj[frame, 1])
         return line, point
 
     ani = FuncAnimation(fig, update, frames=len(transfer_traj), interval=20)
