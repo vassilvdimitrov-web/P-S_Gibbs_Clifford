@@ -71,34 +71,71 @@ def relative_to_com_coordinates(r_traj, m1, m2):
     x2_traj = -(m1 / M) * r_traj
     return x1_traj, x2_traj
 
-def simulate_hohmann_transfer(r1, r2, mu_red, mu_total, delta_v1, dt=0.01, steps=4000):
+def simulate_hohmann_transfer(r1, r2, mu_red, mu_total, delta_v1, delta_v2,dt=0.001):
     """
-    Simulate the transfer ellipse after the first burn.
-    We assume m1 >> m2, so the large body is fixed and the smaller 
-    body moves in the central field.
-
-    Start on a circular orbit of radius r1 at:
-        r0 = [r1, 0]
-        v0 = [0, v_circ + delta_v1]
-    Then integrate the motion numerically.
-
-    r1: Radius of initial circular orbit
-    r2: Radius of target circular orbit
-    mu_red: Reduced mass of the two-body system
-    mu_total: Gravitational parameter G*M of the dominant central body
-    delta_v1: First Hohmann burn
+    Simulate a full Hohmann transfer:
+    1) first burn at r1
+    2) coast for half the transfer ellipse period
+    3) second burn at apoapsis
+    4) continue on final circular orbit
     """
-    #acceleration is -(k/mu_red) r/|r|^3
-    #we want this to equal -mu_total * r / |r|^3
-    # --> k = mu_red * mu_total
     k = mu_red * mu_total
 
+    # Initial circular speed
     v_circ1 = np.sqrt(mu_total / r1)
 
-    r0 = np.array([r1, 0.0])
-    v0 = np.array([0.0, v_circ1 + delta_v1])
+    # Transfer ellipse semi-major axis
+    a_transfer = 0.5 * (r1 + r2)
 
-    return simulate_two_body(r0, v0, mu_red, dt=dt, steps=steps, k=k)
+    # Half period of the transfer ellipse
+    t_half = np.pi * np.sqrt(a_transfer**3 / mu_total)
+
+    # Number of steps for first phase
+    steps1 = int(np.ceil(t_half / dt))
+
+    # Start at periapsis
+    r = np.array([r1, 0.0], dtype=float)
+    v = np.array([0.0, v_circ1 + delta_v1], dtype=float)
+
+    positions1 = np.zeros((steps1 + 1, 2))
+    velocities1 = np.zeros((steps1 + 1, 2))
+
+    positions1[0] = r
+    velocities1[0] = v
+
+    for i in range(1, steps1 + 1):
+        r, v = rk4_step(r, v, dt, mu_red, k)
+        positions1[i] = r
+        velocities1[i] = v
+
+    # State after half transfer period = apoapsis
+    r_apo = positions1[-1].copy()
+    v_apo = velocities1[-1].copy()
+
+    # Second burn in tangential direction
+    tangential_dir = v_apo / np.linalg.norm(v_apo)
+    v = v_apo + delta_v2 * tangential_dir
+    r = r_apo.copy()
+
+    # Simulate one full final circular orbit
+    T2 = 2 * np.pi * np.sqrt(r2**3 / mu_total)
+    steps2 = int(np.ceil(T2 / dt))
+
+    positions2 = np.zeros((steps2 + 1, 2))
+    velocities2 = np.zeros((steps2 + 1, 2))
+
+    positions2[0] = r
+    velocities2[0] = v
+
+    for i in range(1, steps2 + 1):
+        r, v = rk4_step(r, v, dt, mu_red, k)
+        positions2[i] = r
+        velocities2[i] = v
+
+    positions_full = np.vstack((positions1, positions2[1:]))
+    velocities_full = np.vstack((velocities1, velocities2[1:]))
+
+    return positions_full, velocities_full, positions1
 # -----------------------
 # THREE BODY (part d)
 # -----------------------

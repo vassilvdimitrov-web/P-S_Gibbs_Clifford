@@ -101,12 +101,6 @@ def part_b():
     """
 
 def part_c():
-    # -------------------
-    # PART (c): Hohmann (simplified visualization)
-    # -------------------
-    # Transfer from one circular orbit of radius r1 to another circular 
-    # orbit of radius r2 around a dominant central mass m1.
-
     # We now assume m1 >> m2
     M_central = 10.0
     m_sat = 0.001
@@ -116,7 +110,7 @@ def part_c():
 
     # Initial and final circular radii
     r1 = 1.0
-    r2 = 2.0
+    r2 = 4.0
 
     # Compute Hohmann transfer data
     delta_v1, delta_v2, a_transfer = hohmann_delta_v(r1, r2, mu_total_transfer)
@@ -125,36 +119,19 @@ def part_c():
     print("delta_v2 =", delta_v2)
     print("transfer semi-major axis =", a_transfer)
 
-    # Simulate the transfer ellipse after the first burn
-    transfer_traj, transfer_vel = simulate_hohmann_transfer(
-        r1, r2, mu_red_transfer, mu_total_transfer, delta_v1,
-        dt=0.01, steps=2500
-    )
+    transfer_traj, transfer_vel, transfer_only = simulate_hohmann_transfer(
+    r1, r2,
+    mu_red_transfer, mu_total_transfer,
+    delta_v1, delta_v2,
+    dt=0.001
+)
 
-    # Build the two circular reference orbits for plotting
     theta = np.linspace(0, 2 * np.pi, 500)
     circle1 = np.column_stack((r1 * np.cos(theta), r1 * np.sin(theta)))
     circle2 = np.column_stack((r2 * np.cos(theta), r2 * np.sin(theta)))
 
-    # Plot result for task (c)
-    plot_hohmann_transfer(circle1, circle2, transfer_traj, title="Part (c): Hohmann transfer")
-    # Animate result for task (c)
-    ani_hohmann = animate_hohmann_transfer(transfer_traj, r1, r2)
-
-    """
-    r0 = np.array([1.0, 0.0])
-    v0 = np.array([0.0, 1.0])
-
-    traj1 = simulate_two_body(r0, v0, steps=2000)
-
-    r0_new = np.array([2.0, 0.0])
-    v0_new = np.array([0.0, 0.7])
-
-    traj2 = simulate_two_body(r0_new, v0_new, steps=2000)
-
-    plot_multiple([traj1, traj2])
-    # """
-
+    plot_hohmann_transfer(circle1, circle2, transfer_only, title="Part (c): Hohmann transfer")
+    ani_hohmann = animate_hohmann_transfer(transfer_traj, r1, r2, stride=20, interval=10)
 
 def part_d():
     # -------------------

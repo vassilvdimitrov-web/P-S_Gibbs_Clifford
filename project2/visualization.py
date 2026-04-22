@@ -159,12 +159,13 @@ def plot_vis_viva(phi_vals, v_vals):
 # ------------------------------------------------------------
 # Special plot for task (c)
 # ------------------------------------------------------------
+
 def plot_hohmann_transfer(circle1, circle2, transfer, title="Hohmann transfer"):
     """
     Plot:
         - initial circular orbit
         - final circular orbit
-        - transfer ellipse
+        - transfer ellipse (only the transfer half)
     """
     plt.figure(figsize=(7, 7))
 
@@ -179,9 +180,7 @@ def plot_hohmann_transfer(circle1, circle2, transfer, title="Hohmann transfer"):
     plt.grid(True)
     plt.show()
 
-def animate_hohmann_transfer(transfer_traj, r1, r2):
-    #Animate the motion along the transfer ellipse
-
+def animate_hohmann_transfer(full_traj, r1, r2, stride=20, interval=10):
     fig, ax = plt.subplots(figsize=(7, 7))
 
     theta = np.linspace(0, 2 * np.pi, 400)
@@ -199,17 +198,19 @@ def animate_hohmann_transfer(transfer_traj, r1, r2):
     ax.grid(True)
     ax.set_title("Hohmann transfer animation")
 
-    line, = ax.plot([], [], '-', lw=2)
-    point, = ax.plot([], [], 'o')
+    line, = ax.plot([], [], '-', lw=2, color='green')
+    point, = ax.plot([], [], 'o', color='red')
 
-    def update(frame):
-        x = transfer_traj[:frame, 0]
-        y = transfer_traj[:frame, 1]
+    frame_indices = np.arange(0, len(full_traj), stride)
 
+    def update(frame_idx):
+        idx = frame_indices[frame_idx]
+        x = full_traj[:idx + 1, 0]
+        y = full_traj[:idx + 1, 1]
         line.set_data(x, y)
-        point.set_data([transfer_traj[frame, 0]], [transfer_traj[frame, 1]])
+        point.set_data([full_traj[idx, 0]], [full_traj[idx, 1]])
         return line, point
 
-    ani = FuncAnimation(fig, update, frames=len(transfer_traj), interval=20)
+    ani = FuncAnimation(fig, update, frames=len(frame_indices), interval=interval)
     plt.show()
     return ani
