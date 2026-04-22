@@ -23,9 +23,34 @@ def plot_multiple(trajectories):
     for traj in trajectories:
         plt.plot(traj[:, 0], traj[:, 1])
     plt.axis("equal")
-    plt.title("Three-body trajectories")
+    plt.title("Part d:Three-body trajectories")
     plt.show()
 
+# -------------------
+# PART C: 
+# -------------------
+
+def animate_orbits(trajectories):
+    fig, ax = plt.subplots()
+    ax.set_xlim(-3, 3)
+    ax.set_ylim(-3, 3)
+    ax.set_aspect('equal')
+
+    lines = [ax.plot([], [], '-')[0] for _ in trajectories]
+    points = [ax.plot([], [], 'o')[0] for _ in trajectories]
+
+    def update(frame):
+        for i, traj in enumerate(trajectories):
+            if frame < len(traj):
+                x = traj[:frame, 0]
+                y = traj[:frame, 1]
+                lines[i].set_data(x, y)
+                points[i].set_data([traj[frame, 0]], [traj[frame, 1]])
+        return lines + points
+
+    max_len = max(len(t) for t in trajectories)
+    ani = FuncAnimation(fig, update, frames=max_len, interval=20)
+    plt.show()
 
 # -------------------
 # Animation (PART D)
@@ -45,7 +70,7 @@ def animate_three_body(traj):
             y = traj[:frame, i, 1]
 
             lines[i].set_data(x, y)
-            points[i].set_data(traj[frame, i, 0], traj[frame, i, 1])
+            points[i].set_data([traj[frame, i, 0]], [traj[frame, i, 1]])
 
         return lines + points
 
@@ -61,7 +86,7 @@ def plot_vis_viva(r_vals, v_vals):
     plt.plot(r_vals, v_vals)
     plt.xlabel("r")
     plt.ylabel("v")
-    plt.title("Vis-viva relation")
+    plt.title("Part b:Vis-viva relation")
     plt.show()
 
 
@@ -80,5 +105,5 @@ def plot_vis_viva_phi(phi, v_vals):
     plt.plot(phi, v_vals)
     plt.xlabel("phi")
     plt.ylabel("v(phi)")
-    plt.title("Vis-viva vs angle")
+    plt.title("Part b: Vis-viva vs angle")
     plt.show()

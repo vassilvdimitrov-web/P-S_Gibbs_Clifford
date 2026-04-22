@@ -18,9 +18,15 @@ def effective_potential(r, L, mu):
     return L**2 / (2 * mu * r**2) - k / r
 
 def eccentricity_vector(r, v, mu):
-    L_vec = angular_momentum(mu, r, v)
-    return (np.cross(mu * v, L_vec) / (mu * k)) - (r / np.linalg.norm(r))
+    # convert to 3D
+    r3 = np.array([r[0], r[1], 0.0])
+    v3 = np.array([v[0], v[1], 0.0])
 
+    L_vec = np.cross(mu * r3, v3)  # angular momentum vector
+
+    e_vec_3d = (np.cross(v3, L_vec) / (k)) - (r3 / np.linalg.norm(r3))
+
+    return e_vec_3d[:2]  # return back to 2D
 def orbit_equation(phi, L, mu, e):
     return (L**2 / (mu * k)) / (1 + e * np.cos(phi))
 

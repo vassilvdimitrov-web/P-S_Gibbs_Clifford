@@ -1,21 +1,36 @@
 import numpy as np
 from simulation import simulate_two_body, simulate_three_body
-from visualization import plot_trajectory, plot_multiple
-from physics import eccentricity_vector, reconstruct_positions
+from visualization import animate_three_body, plot_trajectory, plot_multiple
+from physics import eccentricity_vector, reconstruct_positions, vis_viva
 from visualization import plot_vis_viva_phi, plot_vis_viva
+from physics import reduced_mass
+from visualization import animate_orbits
+from physics import energy, angular_momentum
+from visualization import plot_with_lrl
+
 # -------------------
 # PART (a): Trajectory
 # -------------------
 r0 = np.array([1.0, 0.0])
 v0 = np.array([0.0, 1.0])
 
-traj = simulate_two_body(r0, v0)
-plot_trajectory(traj, "Elliptical Orbit")
-
 m1, m2 = 2.0, 1.0
 
-r0 = np.array([1.0, 0.0])
-v0 = np.array([0.0, 1.2])
+
+traj = simulate_two_body(r0, v0)
+plot_trajectory(traj, "Part a:Elliptical Orbit")
+
+mu = reduced_mass(m1, m2)
+e_vec = eccentricity_vector(r0, v0, mu)
+
+plot_with_lrl(traj, e_vec)
+
+E = energy(mu, r0, v0)
+L = angular_momentum(mu, r0, v0)
+
+print(f"Energy: {E:.5f}")
+print(f"Angular momentum: {L}")
+
 
 traj_r = simulate_two_body(r0, v0)
 
@@ -36,7 +51,9 @@ e = 0.5
 a = 1.5
 
 r_vals = (L**2 / (mu * 1.0)) / (1 + e * np.cos(phi))
-v_vals = np.sqrt(1.0 * (2/r_vals - 1/a))
+#v_vals = np.sqrt(1.0 * (2/r_vals - 1/a))
+v_vals = vis_viva(r_vals, a)
+
 
 plot_vis_viva_phi(phi, v_vals)
 
@@ -74,6 +91,7 @@ traj_circ2 = simulate_two_body(r0_final, np.array([0.0, v2]), steps=2000)
 plot_multiple([traj_circ1, traj_transfer, traj_circ2])
 
 
+animate_orbits([traj_circ1, traj_transfer, traj_circ2])
 """ 
 # -------------------
 # PART (d): Three-body
@@ -128,14 +146,18 @@ for title, masses in cases:
     pos = np.array([[1,0], [-1,0], [0,1]], dtype=float)
     vel = np.array([[0,0.5], [0,-0.5], [-0.5,0]], dtype=float)
 
-    traj = simulate_three_body(pos, vel, masses, dt=0.01, steps=3000)
+    traj, vel_traj = simulate_three_body(pos, vel, masses, dt=0.01, steps=10000)
+    #traj = simulate_three_body(pos, vel, masses, dt=0.01, steps=3000)
 
     # Plot trajectories
     plot_multiple([traj[:,0], traj[:,1], traj[:,2]])
 
+
+    animate_three_body(traj)
     # Energy check (initial vs final)
     E_initial = total_energy(pos, vel, masses)
-    E_final = total_energy(traj[-1], vel, masses)
+    E_final = total_energy(traj[-1], vel_traj[-1], masses)
+    #E_final = total_energy(traj[-1], vel, masses)
 
     print(f"Initial Energy: {E_initial:.5f}")
     print(f"Final Energy:   {E_final:.5f}")

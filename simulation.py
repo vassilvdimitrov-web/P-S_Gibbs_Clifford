@@ -61,10 +61,13 @@ def simulate_three_body(pos, vel, masses, dt=0.01, steps=5000):
     pos = pos.copy()
     vel = vel.copy()
 
-    traj = np.zeros((steps, len(masses), 2))
+    #traj = np.zeros((steps, len(masses), 2))
+    traj_pos = np.zeros((steps, len(masses), 2))
+    traj_vel = np.zeros((steps, len(masses), 2))
 
     for t in range(steps):
-        traj[t] = pos
+        traj_pos[t] = pos
+        traj_vel[t] = vel
 
         # RK4 (important for stability)
         k1_v = acceleration_3body(pos, masses)
@@ -82,7 +85,8 @@ def simulate_three_body(pos, vel, masses, dt=0.01, steps=5000):
         pos += (dt/6)*(k1_r + 2*k2_r + 2*k3_r + k4_r)
         vel += (dt/6)*(k1_v + 2*k2_v + 2*k3_v + k4_v)
 
-    return traj
+    #return traj
+    return traj_pos, traj_vel
 
 def total_energy(pos, vel, masses):
     KE = 0
