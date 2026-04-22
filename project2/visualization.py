@@ -65,7 +65,7 @@ def animate_three_body(traj, zoom_body=None, zoom_pad=0.2):
     else:
         fig, axes = plt.subplots(1, 2, figsize=(12, 6))
 
-    span = np.max(np.abs(traj)) * 1.1
+    span = min(np.max(np.abs(traj)) * 1.1, 5)
     axes[0].set_xlim(-span, span)
     axes[0].set_ylim(-span, span)
     axes[0].set_aspect('equal')
@@ -92,16 +92,17 @@ def animate_three_body(traj, zoom_body=None, zoom_pad=0.2):
             x = traj[:frame, i, 0]
             y = traj[:frame, i, 1]
             lines_main[i].set_data(x, y)
-            points_main[i].set_data(traj[frame, i, 0], traj[frame, i, 1])
+            points_main[i].set_data([traj[frame, i, 0]], [traj[frame, i, 1]])
 
         if zoom_body is not None:
             line_zoom.set_data(traj[:frame, zoom_body, 0], traj[:frame, zoom_body, 1])
-            point_zoom.set_data(traj[frame, zoom_body, 0], traj[frame, zoom_body, 1])
+            point_zoom.set_data([traj[frame, zoom_body, 0]], [traj[frame, zoom_body, 1]])
             return lines_main + points_main + [line_zoom, point_zoom]
         return lines_main + points_main
 
     ani = FuncAnimation(fig, update, frames=len(traj), interval=20)
     plt.show()
+    return ani
 
 # ------------------------------------------------------------
 # Special plot for task (a)
@@ -206,8 +207,9 @@ def animate_hohmann_transfer(transfer_traj, r1, r2):
         y = transfer_traj[:frame, 1]
 
         line.set_data(x, y)
-        point.set_data(transfer_traj[frame, 0], transfer_traj[frame, 1])
+        point.set_data([transfer_traj[frame, 0]], [transfer_traj[frame, 1]])
         return line, point
 
     ani = FuncAnimation(fig, update, frames=len(transfer_traj), interval=20)
     plt.show()
+    return ani

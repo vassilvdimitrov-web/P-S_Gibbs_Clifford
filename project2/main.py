@@ -120,7 +120,7 @@ circle2 = np.column_stack((r2 * np.cos(theta), r2 * np.sin(theta)))
 # Plot result for task (c)
 plot_hohmann_transfer(circle1, circle2, transfer_traj, title="Part (c): Hohmann transfer")
 # Animate result for task (c)
-animate_hohmann_transfer(transfer_traj, r1, r2)
+ani_hohmann = animate_hohmann_transfer(transfer_traj, r1, r2)
 
 """
 r0 = np.array([1.0, 0.0])
@@ -163,7 +163,7 @@ vel = np.array([
 
 traj = simulate_three_body(pos, vel, masses, dt=0.1, steps=8000)
 
-animate_three_body(traj)
+ani_d1 = animate_three_body(traj)
 
 # --- Case 1: Equal masses (figure-8)
 # Circular, periodic and stable orbit (very simple & predictable)
@@ -185,7 +185,7 @@ masses = np.array([1, 1, 1])
 
 traj = simulate_three_body(pos, vel, masses, dt=0.01, steps=8000)
 
-animate_three_body(traj)
+ani_d2 = animate_three_body(traj)
 
 # Less trivial periodic config
 masses = np.array([1, 1, 1])
@@ -205,7 +205,7 @@ vel = vel / np.sqrt(2)
 
 traj = simulate_three_body(pos, vel, masses, dt=0.01, steps=3000)
 
-animate_three_body(traj)
+ani_d3 = animate_three_body(traj)
 
 # --- Case 2: Lagrange equilateral triangle with a very heavy body
 # Lagrange's solution is periodic for any mass ratio: the triangle rotates
@@ -213,7 +213,7 @@ animate_three_body(traj)
 # the heavy body's circle is small (radius = 3m/(M+2m) for side sqrt(3)),
 # because momentum conservation forbids a large excursion of the heavy body.
 # We can see a periodic orbit the zoomed sub-plot.
-# masses = np.array([100.0, 1.0, 1.0])
+masses = np.array([100.0, 1.0, 1.0])
 
 pos_centroid = np.array([
     [1.0, 0.0],
@@ -233,7 +233,7 @@ vel = omega * np.column_stack((-pos[:, 1], pos[:, 0]))
 traj = simulate_three_body(pos, vel, masses, dt=0.002, steps=6000)
 
 # zoom_body=0 zooms on the heavy body so its small but exact circle is seen
-animate_three_body(traj, zoom_body=0)
+ani_d4 = animate_three_body(traj, zoom_body=0)
 
 # --- Case 3: Hierarchical triple with m1 >> m2 >> m3 (three distinct orbits)
 # A Lagrange-like configuration forces all three bodies to share one triangle
@@ -287,5 +287,5 @@ vel = np.array([
 traj = simulate_three_body(pos, vel, masses, dt=0.01, steps=15000)
 
 # Zoom on m1 so its tiny wobble is visible alongside the full system view.
-animate_three_body(traj, zoom_body=0)
+ani_d5 = animate_three_body(traj, zoom_body=0)
 
